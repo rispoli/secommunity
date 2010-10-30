@@ -1,0 +1,37 @@
+source(a).
+source(b).
+source(c).
+
+category(c1).
+category(c2).
+category(c3).
+category(c4).
+category(c5).
+
+principal(a).
+principal(b).
+principal(c).
+principal(k_a).
+principal(k_b).
+principal(k_g).
+principal(k_d).
+principal(k_e).
+
+says(a, pca(k_a, c1)).
+says(b, pca(k_a, c1)).
+says(c, pca(k_a, c1)).
+
+says(a, pca(k_b, c2)).
+
+says(a, pca(k_g, c3)).
+says(b, pca(k_g, c3)).
+
+says(a, neg(pca(k_d, c4))).
+says(b, neg(pca(k_d, c4))).
+says(c, neg(pca(k_d, c4))).
+
+box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
+
+diamond(Phi) :- says(X, Phi), source(X).
+
+majority(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R1, #count{Y : source(Y)} = R2, R3 = R2 / 2, R1 > R3.

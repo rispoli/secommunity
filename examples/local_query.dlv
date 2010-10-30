@@ -1,0 +1,1 @@
+:- box(pca(k_a, c1)), diamond(pca(k_b, c2)), majority(pca(k_g, c3)), box(neg(pca(k_d, c4))), not box(pca(k_e, c5)).
