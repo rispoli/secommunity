@@ -1,0 +1,19 @@
+source(a).
+source(b).
+source(c).
+
+category(c7).
+
+principal(a).
+principal(b).
+principal(c).
+principal(p).
+
+says(b, pca(p, c7)).
+says(c, pca(p, c7)).
+
+box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
+
+diamond(Phi) :- says(X, Phi), source(X).
+
+majority(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R1, #count{Y : source(Y)} = R2, R3 = R2 / 2, R1 > R3.
