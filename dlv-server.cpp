@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	listen(sock_fd, SOMAXCONN);
-	stringstream startup; startup << "server started, listening on port: " << port_no;
+	stringstream startup; startup << "server started, listening on port: " << port_no << ", dlv: " << binary_path << ", knowledge base: " << kb_fn;
 	if(log_level > 0)
 		log_message(log_fn, startup.str());
 	signal(SIGCHLD, SIG_IGN);
