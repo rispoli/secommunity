@@ -74,7 +74,7 @@ int process_query(string iporhostname, string query, int msg_type) {
 	close(sock_fd);
 
 	if(answer.status == ERROR) {
-		cerr << answer.result;
+		cerr << iporhostname << ":" << port << " says: " << answer.result << endl;
 		return ERROR;
 	}
 
