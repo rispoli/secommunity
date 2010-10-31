@@ -1,0 +1,19 @@
+#maxint = 2.
+
+source(a).
+source(b).
+
+category(c2).
+
+principal(a).
+principal(b).
+principal(p).
+
+says(a, pca(p, c2)).
+says(b, pca(p, c2)).
+
+box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
+
+diamond(Phi) :- says(X, Phi), source(X).
+
+majority(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R1, #count{Y : source(Y)} = R2, R3 = R2 / 2, R1 > R3.

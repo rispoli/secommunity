@@ -7,7 +7,7 @@ EXECUTABLE=dlv-server
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): $(OBJECTS)
+$(EXECUTABLE): $(OBJECTS) message.h
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
 
 .cpp.o:

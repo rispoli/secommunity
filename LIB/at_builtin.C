@@ -1,6 +1,7 @@
 #include <errno.h>
 #include "extpred.h"
 #include <iostream>
+#include "../message.h"
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdlib.h>
@@ -9,6 +10,77 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+int process_query(string iporhostname, string query, int msg_type) {
+	int sock_fd = -1, rv;
+	string port("3333");
+
+	if((rv = iporhostname.find(":")) != string::npos) {
+		port = iporhostname.substr(rv + 1, iporhostname.length() - rv);
+		iporhostname = iporhostname.substr(0, rv);
+	}
+
+	struct addrinfo hints, *serv_info, *p;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if(getaddrinfo(iporhostname.c_str(), port.c_str(), &hints, &serv_info) != 0) {
+		cerr << "Could not resolve host (" << errno << ")" << endl;
+		return ERROR;
+	}
+
+	for(p = serv_info; p != NULL; p = p->ai_next) {
+		if((sock_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+			cerr << "Could not open socket (" << errno << ")" << endl;
+			continue;
+		}
+
+		if(connect(sock_fd, p->ai_addr, p->ai_addrlen) == -1) {
+			cerr << "Could not connect (" << errno << ")" << endl;
+			close(sock_fd);
+			continue;
+		}
+
+		break;
+	}
+
+	if(p == NULL) {
+		cerr << "Failed to connect" << endl;
+		close(sock_fd);
+		freeaddrinfo(serv_info);
+		return ERROR;
+	}
+
+	freeaddrinfo(serv_info);
+
+	struct msg_c2s msg;
+	memset(msg.query, 0, sizeof(msg.query));
+	strncpy(msg.query, query.c_str(), sizeof(msg.query));
+	msg.msg_type = msg_type;
+	if(send(sock_fd, (void *)&msg, sizeof(msg), 0) == -1) {
+		cerr << "Could not send query (" << errno << ")" << endl;;
+		close(sock_fd);
+		return ERROR;
+	}
+
+	struct msg_s2c answer;
+	memset(answer.result, 0, sizeof(answer.result));
+	if(recv(sock_fd, (void *)&answer, sizeof(answer), 0) == -1) {
+		cerr << "Could not receive result (" << errno << ")" << endl;
+		close(sock_fd);
+		return ERROR;
+	}
+
+	close(sock_fd);
+
+	if(answer.status == ERROR) {
+		cerr << answer.result;
+		return ERROR;
+	}
+
+	return atoi(answer.result);
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,67 +88,33 @@ extern "C" {
 	BUILTIN(at, ii) {
 		if(argv[0].isString() && argv[1].isSymbol()) {
 
-			int sock_fd = -1, rv;
-
+			string iporhostname(argv[0].toString());
 			string query(argv[1].toSymbol());
-			string iporhostname(argv[0].toString()), port("3333");
 
-			if((rv = iporhostname.find(":")) != string::npos) {
-				port = iporhostname.substr(rv + 1, iporhostname.length() - rv);
-				iporhostname = iporhostname.substr(0, rv);
-			}
+			return process_query(iporhostname, query, SIMPLEQUERY) == SUCCESS;
 
-			struct addrinfo hints, *serv_info, *p;
-			memset(&hints, 0, sizeof(hints));
-			hints.ai_family = AF_UNSPEC;
-			hints.ai_socktype = SOCK_STREAM;
+		}
 
-			if(getaddrinfo(iporhostname.c_str(), port.c_str(), &hints, &serv_info) != 0) {
-				cerr << "Could not resolve host (" << errno << ")" << endl;
-				return false;
-			}
+		return false;
+	}
 
-			for(p = serv_info; p != NULL; p = p->ai_next) {
-				if((sock_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-					cerr << "Could not open socket (" << errno << ")" << endl;
-					continue;
-				}
+	BUILTIN(count_at, iii) {
+		argv[2] = CONSTANT(ERROR);
+		return false;
+	}
 
-				if(connect(sock_fd, p->ai_addr, p->ai_addrlen) == -1) {
-					cerr << "Could not connect (" << errno << ")" << endl;
-					close(sock_fd);
-					continue;
-				}
+	BUILTIN(count_at, iio) {
+		if(argv[0].isString() && argv[1].isString()) {
 
-				break;
-			}
+			string iporhostname(argv[0].toString());
+			string query(argv[1].toString());
 
-			if(p == NULL) {
-				cerr << "Failed to connect" << endl;
-				close(sock_fd);
-				freeaddrinfo(serv_info);
-				return false;
-			}
+			int r = process_query(iporhostname, query, COUNTINGQUERY);
 
-			freeaddrinfo(serv_info);
+			argv[2] = CONSTANT(r);
 
-			if(send(sock_fd, query.c_str(), strlen(query.c_str()), 0) == -1) {
-				cerr << "Could not send query (" << errno << ")" << endl;;
-				close(sock_fd);
-				return false;
-			}
+			return r != ERROR;
 
-			char buffer_s[1];
-			memset(buffer_s, 0, sizeof(buffer_s));
-			if(recv(sock_fd, buffer_s, sizeof(buffer_s), 0) == -1) {
-				cerr << "Could not receive result (" << errno << ")" << endl;
-				close(sock_fd);
-				return false;
-			}
-
-			close(sock_fd);
-
-			return atoi(buffer_s);
 		}
 
 		return false;

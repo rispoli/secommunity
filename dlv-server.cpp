@@ -4,6 +4,7 @@ namespace po = boost::program_options;
 #include <errno.h>
 #include <fstream>
 #include <iostream>
+#include "message.h"
 #include <netinet/in.h>
 #include <signal.h>
 #include <sstream>
@@ -46,15 +47,16 @@ void delete_file(const char *filename) {
 
 int handle_query(string binary_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr) {
 
-	char buffer_s[1024];
-	memset(buffer_s, 0, sizeof(buffer_s));
-	if(recv(sock_fd, buffer_s, sizeof(buffer_s), 0) == -1) {
+	struct msg_c2s query;
+	memset(query.query, 0, sizeof(query.query));
+	if(recv(sock_fd, (void *)&query, sizeof(query), 0) == -1) {
 		cerr << "Could not receive data (" << errno << ")" << endl;
 		close(sock_fd);
 		return 1;
 	}
 
-	stringstream query_fn; query_fn << "/tmp/dlv-query." << getpid() << "." << time(NULL);
+	stringstream pid_time; pid_time << getpid() << "_" << time(NULL);
+	stringstream query_fn; query_fn << "/tmp/dlv-query_" << pid_time.str();
 	string command = binary_path + options + " " + kb_fn + " " + query_fn.str() + " 2>&1";
 
 	ofstream query_f(query_fn.str().c_str());
@@ -63,7 +65,10 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 		close(sock_fd);
 		return 1;
 	}
-	query_f << ":- " << buffer_s << ".";
+	if(query.msg_type == SIMPLEQUERY)
+		query_f << ":- " << query.query << ".";
+	else if(query.msg_type == COUNTINGQUERY)
+		query_f << "remote_count_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #count{" << query.query << "} = X_" << pid_time.str() << ".";
 	query_f.close();
 
 	FILE *fpipe;
@@ -82,7 +87,28 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 		c_output << buffer_p;
 	pclose(fpipe);
 
-	if(send(sock_fd, c_output.str() == "" ? "1" : "0", 1, 0) == -1) {
+	struct msg_s2c answer;
+	memset(answer.result, 0, sizeof(answer.result));
+
+	if(c_output.str().find("parser errors") != string::npos) {
+		strcpy(answer.result, "Aborted due to parser errors");
+		answer.status = ERROR;
+	} else if(query.msg_type == SIMPLEQUERY) {
+		strcpy(answer.result, c_output.str() == "" ? "1" : "0");
+		answer.status = SUCCESS;
+	} else if(query.msg_type == COUNTINGQUERY) {
+		stringstream str_to_search; str_to_search << "remote_count_" << pid_time.str();
+		size_t p;
+		if((p = c_output.str().find(str_to_search.str())) == string::npos) {
+			strcpy(answer.result, "Could not count");
+			answer.status = ERROR;
+		} else {
+			strcpy(answer.result, c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1).c_str());
+			answer.status = SUCCESS;
+		}
+	}
+
+	if(send(sock_fd, (void *)&answer, sizeof(answer), 0) == -1) {
 		cerr << "Could not send answer (" << errno << ")" << endl;;
 		close(sock_fd);
 		delete_file(query_fn.str().c_str());
@@ -96,7 +122,7 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 		stringstream message;
 		message << "received message from: " << inet_ntoa(sin_addr);
 		if(log_level > 1)
-			message << ", query: " << buffer_s << ", result: " << (c_output.str() == "" ? "true" : (c_output.str().find("parser errors") != string::npos ? "aborted due to parser errors" : "false"));
+			message << ", query: '" << query.query << "', result: " << answer.result;
 		log_message(log_fn, message.str());
 	}
 
