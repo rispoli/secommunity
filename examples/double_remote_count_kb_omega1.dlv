@@ -4,15 +4,16 @@ source(a).
 source(b).
 source(c).
 
-category(c7).
+category(c1).
 
 principal(a).
 principal(b).
 principal(c).
 principal(p).
 
-says(b, pca(p, c7)).
-says(c, pca(p, c7)).
+says(a, pca(p, c1)).
+says(b, pca(p, c1)).
+says(c, pca(p, c1)).
 
 box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
 

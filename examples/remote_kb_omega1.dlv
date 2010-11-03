@@ -1,3 +1,5 @@
+#maxint = 3.
+
 source(a).
 source(b).
 source(c).

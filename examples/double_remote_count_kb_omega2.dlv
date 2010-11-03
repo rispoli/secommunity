@@ -1,18 +1,17 @@
-#maxint = 3.
+#include <at_builtin>
+#maxint = 2.
 
 source(a).
 source(b).
-source(c).
 
-category(c7).
+category(c2).
 
 principal(a).
 principal(b).
-principal(c).
 principal(p).
 
-says(b, pca(p, c7)).
-says(c, pca(p, c7)).
+says(a, pca(p, c2)).
+says(b, pca(p, c2)) :- #at("localhost:3335", box(pca(p, c3))).
 
 box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
 

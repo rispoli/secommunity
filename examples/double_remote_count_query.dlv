@@ -1,0 +1,4 @@
+#include <at_builtin>
+#maxint = 65536.
+
+majority(pca(p, c0)) :- #count_at("localhost:3333", "S : says(S, pca(p, c1))", Xo1), #count_at("localhost:3334", "S : says(S, pca(p, c2))", Xo2), Xo1 > Xo2.
