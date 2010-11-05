@@ -122,7 +122,7 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 		stringstream message;
 		message << "received message from: " << inet_ntoa(sin_addr);
 		if(log_level > 1)
-			message << ", query: '" << query.query << "', result: " << answer.result;
+			message << ", query: '" << query.query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == SUCCESS ? (c_output.str() == "" ? "true" : "false") : answer.result);
 		log_message(log_fn, message.str());
 	}
 
