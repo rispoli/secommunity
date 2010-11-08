@@ -8,10 +8,10 @@ EXECUTABLE=dlv-server
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): $(OBJECTS) message.h
+$(EXECUTABLE): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
 
-.cpp.o:
+.cpp.o: message.h
 	$(CC) $(CFLAGS) -I $(BOOST) -c $< -o $@
 
 clean:
