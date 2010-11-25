@@ -99,7 +99,6 @@ extern "C" {
 	}
 
 	BUILTIN(count_at, iii) {
-		argv[2] = CONSTANT(ERROR);
 		return false;
 	}
 
