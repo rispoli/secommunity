@@ -67,8 +67,8 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 	}
 	if(query.msg_type == SIMPLEQUERY)
 		query_f << ":- " << query.query << ".";
-	else if(query.msg_type == COUNTINGQUERY)
-		query_f << "remote_count_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #count{" << query.query << "} = X_" << pid_time.str() << ".";
+	else if(query.msg_type == AGGREGATEQUERY)
+		query_f << "remote_" << query.aggregate_query << "_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #" << query.aggregate_query << "{" << query.query << "} = X_" << pid_time.str() << ".";
 	query_f.close();
 
 	FILE *fpipe;
@@ -96,11 +96,11 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 	} else if(query.msg_type == SIMPLEQUERY) {
 		strcpy(answer.result, c_output.str() == "" ? "1" : "0");
 		answer.status = SUCCESS;
-	} else if(query.msg_type == COUNTINGQUERY) {
-		stringstream str_to_search; str_to_search << "remote_count_" << pid_time.str();
+	} else if(query.msg_type == AGGREGATEQUERY) {
+		stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
 		size_t p;
 		if((p = c_output.str().find(str_to_search.str())) == string::npos) {
-			strcpy(answer.result, "Could not count");
+			strcpy(answer.result, "Could not perform aggregate query");
 			answer.status = ERROR;
 		} else {
 			strcpy(answer.result, c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1).c_str());
@@ -122,7 +122,7 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 		stringstream message;
 		message << "received message from: " << inet_ntoa(sin_addr);
 		if(log_level > 1)
-			message << ", query: '" << query.query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == SUCCESS ? (c_output.str() == "" ? "true" : "false") : answer.result);
+			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query.query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == SUCCESS ? (c_output.str() == "" ? "true" : "false") : answer.result);
 		log_message(log_fn, message.str());
 	}
 
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	listen(sock_fd, SOMAXCONN);
-	stringstream startup; startup << "server started, listening on port: " << port_no << ", dlv: " << binary_path << ", knowledge base: " << kb_fn;
+	stringstream startup; startup << "server started (pid: " << getpid() << "), listening on port: " << port_no << ", dlv: " << binary_path << ", knowledge base: " << kb_fn;
 	if(log_level > 0)
 		log_message(log_fn, startup.str());
 	signal(SIGCHLD, SIG_IGN);

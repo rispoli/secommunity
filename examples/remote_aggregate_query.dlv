@@ -1,0 +1,7 @@
+#include <at_builtin>
+
+over1000nr(X) :- #count_at("localhost", "I : emp(I, N, S), S > 1000", X).
+salaryTotal(X) :- #sum_at("localhost", "S, I : emp(I, N, S)", X).
+idTimes(X) :- #times_at("localhost", "I : emp(I, N, S)", X).
+lowest(X) :- #min_at("localhost", "S : emp(I, N, S)", X).
+highest(X) :- #max_at("localhost", "S : emp(I, N, S)", X).

@@ -10,7 +10,22 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-int process_query(string iporhostname, string query, int msg_type) {
+#define AGGREGATE(function) \
+	BUILTIN(function##_at, iii) { \
+		return false; \
+	} \
+	BUILTIN(function##_at, iio) { \
+		if(argv[0].isString() && argv[1].isString()) { \
+			string iporhostname(argv[0].toString()); \
+			string query(argv[1].toString()); \
+			int r = process_query(iporhostname, query, AGGREGATEQUERY, #function); \
+			argv[2] = CONSTANT(r); \
+			return r != ERROR; \
+		} \
+		return false; \
+	}
+
+int process_query(string iporhostname, string query, int msg_type, string aggregate_query) {
 	int sock_fd = -1, rv;
 	string port("3333");
 
@@ -56,6 +71,7 @@ int process_query(string iporhostname, string query, int msg_type) {
 	struct msg_c2s msg;
 	memset(msg.query, 0, sizeof(msg.query));
 	strncpy(msg.query, query.c_str(), sizeof(msg.query));
+	strncpy(msg.aggregate_query, aggregate_query.c_str(), sizeof(msg.aggregate_query));
 	msg.msg_type = msg_type;
 	if(send(sock_fd, (void *)&msg, sizeof(msg), 0) == -1) {
 		cerr << "Could not send query (" << errno << ")" << endl;;
@@ -91,33 +107,18 @@ extern "C" {
 			string iporhostname(argv[0].toString());
 			string query(argv[1].toSymbol());
 
-			return process_query(iporhostname, query, SIMPLEQUERY) == SUCCESS;
+			return process_query(iporhostname, query, SIMPLEQUERY, "") == SUCCESS;
 
 		}
 
 		return false;
 	}
 
-	BUILTIN(count_at, iii) {
-		return false;
-	}
-
-	BUILTIN(count_at, iio) {
-		if(argv[0].isString() && argv[1].isString()) {
-
-			string iporhostname(argv[0].toString());
-			string query(argv[1].toString());
-
-			int r = process_query(iporhostname, query, COUNTINGQUERY);
-
-			argv[2] = CONSTANT(r);
-
-			return r != ERROR;
-
-		}
-
-		return false;
-	}
+	AGGREGATE(count)
+	AGGREGATE(sum)
+	AGGREGATE(times)
+	AGGREGATE(min)
+	AGGREGATE(max)
 
 #ifdef __cplusplus
 }
