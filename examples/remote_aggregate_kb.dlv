@@ -1,5 +1,5 @@
 % Example 2-28. The Cartoons Co. Employees (http://www.dlvsystem.com/dlvsystem/html/DLV_User_Manual.html#AEN814)
-% Each employee is is represented by a fact of the form emp(ID,NAME,SALARY) which we store in a file called employees.
+% Each employee is represented by a fact of the form emp(ID,NAME,SALARY).
 
 emp(1, goofie, 1250).
 emp(2, willy, 700).
