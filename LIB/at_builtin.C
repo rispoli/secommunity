@@ -70,6 +70,11 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 
 	struct msg_c2s msg;
 	memset(msg.query, 0, sizeof(msg.query));
+	if(query.size() > sizeof(msg.query)) {
+		cerr << "Network buffer size exceeded: split '" << query << "'" << endl;
+		close(sock_fd);
+		return ERROR;
+	}
 	strncpy(msg.query, query.c_str(), sizeof(msg.query));
 	strncpy(msg.aggregate_query, aggregate_query.c_str(), sizeof(msg.aggregate_query));
 	msg.msg_type = msg_type;
@@ -102,10 +107,10 @@ extern "C" {
 #endif
 
 	BUILTIN(at, ii) {
-		if(argv[0].isString() && argv[1].isSymbol()) {
+		if(argv[0].isString() && (argv[1].isSymbol() || argv[1].isString())) {
 
 			string iporhostname(argv[0].toString());
-			string query(argv[1].toSymbol());
+			string query(argv[1].isSymbol() ? argv[1].toSymbol() : argv[1].toString());
 
 			return process_query(iporhostname, query, SIMPLEQUERY, "") == SUCCESS;
 
