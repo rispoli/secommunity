@@ -1,6 +1,5 @@
+#include <argtable2.h>
 #include <arpa/inet.h>
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
 #include <errno.h>
 #include <fstream>
 #include <iostream>
@@ -45,7 +44,7 @@ void delete_file(const char *filename) {
 		cerr << "Could not delete temp. file: " << *filename << " (" << errno << ")" << endl;
 }
 
-int handle_query(string binary_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr) {
+int handle_query(string executable_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr) {
 
 	struct msg_c2s query;
 	memset(query.query, 0, sizeof(query.query));
@@ -57,7 +56,7 @@ int handle_query(string binary_path, string options, string kb_fn, int sock_fd, 
 
 	stringstream pid_time; pid_time << getpid() << "_" << time(NULL);
 	stringstream query_fn; query_fn << "/tmp/dlv-query_" << pid_time.str();
-	string command = binary_path + options + " " + kb_fn + " " + query_fn.str() + " 2>&1";
+	string command = executable_path + options + " " + kb_fn + " " + query_fn.str() + " 2>&1";
 
 	ofstream query_f(query_fn.str().c_str());
 	if(!query_f.is_open()) {
@@ -134,34 +133,46 @@ int main(int argc, char *argv[]) {
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	string binary_path = "/usr/bin/dlv";
-	string options = " -silent";
-	string kb_fn = "kb.dlv";
-	int port_no = 3333;
-	string log_fn = "queries.log";
-	int log_level = 1;
+	struct arg_lit *help = arg_lit0("h", "help", "print this help and exit");
+	struct arg_lit *daemon = arg_lit0("d", "daemon", "run in background");
+	struct arg_file *executable = arg_file0("e", "executable", NULL, "dlv executable path (default: /usr/bin/dlv)");
+	struct arg_file *knowledge_base = arg_file0("k", "knowledge-base", NULL, "knowledge base path (default: kb.dlv)");
+	struct arg_int *port_number = arg_int0("p", "port-number", NULL, "port number to listen on (default: 3333)");
+	struct arg_file *log_file = arg_file0("L", "log-file", NULL, "log-file path (default: queries.log)");
+	struct arg_int *log_l = arg_int0("l", "log-level", NULL, "0 - off, 1 - default, 2 - verbose");
+	struct arg_end *end = arg_end(23);
+	void *argtable[] = {help, daemon, executable, knowledge_base, port_number, log_file, log_l, end};
 
-	po::options_description desc("Options");
-	desc.add_options()
-		("help,h", "display this help and exit")
-		("daemonize,d", "daemonize this program")
-		("dlv-path,e", po::value<string>(&binary_path)->default_value(binary_path), "dlv executable path")
-		("knowledge-base,k", po::value<string>(&kb_fn)->default_value(kb_fn), "knowledge base path")
-		("port-number,p", po::value<int>(&port_no)->default_value(port_no), "port number to listen on")
-		("log-file,g", po::value<string>(&log_fn)->default_value(log_fn), "log-file path")
-		("log-level,l", po::value<int>(&log_level)->default_value(log_level), "0 - off, 1 - default, 2 - verbose")
-	;
-
-	po::variables_map vm;
-	po::store(po::parse_command_line(argc, argv, desc), vm);
-	po::notify(vm);
-
-	if(vm.count("help")) {
-		cout << desc << endl;
+	if(arg_nullcheck(argtable) != 0) {
+		cerr << "Could not allocate enough memory for command line arguments" << endl;
+		arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
 		return 1;
 	}
 
-	if(vm.count("daemonize")) {
+	executable->filename[0] = "/usr/bin/dlv";
+	knowledge_base->filename[0] = "kb.dlv";
+	port_number->ival[0] = 3333;
+	log_file->filename[0] =  "queries.log";
+	log_l->ival[0] = 1;
+
+
+	int nerrors = arg_parse(argc, argv, argtable);
+
+	if(help->count > 0) {
+		cout << "Usage: " << argv[0];
+		arg_print_syntaxv(stdout, argtable, "\n");
+		arg_print_glossary(stdout, argtable, "  %-30s %s\n");
+		arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
+		return 0;
+	}
+
+	if(nerrors > 0) {
+		arg_print_errors(stdout, end, argv[0]);
+		arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
+		return 1;
+	}
+
+	if(daemon->count > 0) {
 		int pid = fork();
 		if(pid < 0) {
 			cerr << "Could not run in background" << endl;
@@ -169,6 +180,15 @@ int main(int argc, char *argv[]) {
 		} else if(pid > 0) return 0;
 		setsid();
 	}
+
+	string executable_path = executable->filename[0];
+	string options = " -silent";
+	string kb_fn = knowledge_base->filename[0];
+	int port_no = port_number->ival[0];
+	string log_fn = log_file->filename[0];
+	int log_level = log_l->ival[0];
+
+	arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
 
 	if(pipe(termination_pipe) == -1) {
 		cerr << "Could not create pipe (" << errno << ")" << endl;
@@ -199,7 +219,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	listen(sock_fd, SOMAXCONN);
-	stringstream startup; startup << "server started (pid: " << getpid() << "), listening on port: " << port_no << ", dlv: " << binary_path << ", knowledge base: " << kb_fn;
+	stringstream startup; startup << "server started (pid: " << getpid() << "), listening on port: " << port_no << ", dlv: " << executable_path << ", knowledge base: " << kb_fn;
 	if(log_level > 0)
 		log_message(log_fn, startup.str());
 	signal(SIGCHLD, SIG_IGN);
@@ -240,7 +260,7 @@ int main(int argc, char *argv[]) {
 					close(sock_fd);
 					close(termination_pipe[0]);
 					close(termination_pipe[1]);
-					return handle_query(binary_path, options, kb_fn, new_sock_fd, log_fn, log_level, cli_addr.sin_addr);
+					return handle_query(executable_path, options, kb_fn, new_sock_fd, log_fn, log_level, cli_addr.sin_addr);
 				default:
 					close(new_sock_fd);
 			}

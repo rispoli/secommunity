@@ -1,14 +1,25 @@
 CC=/usr/bin/g++
-CFLAGS=-W -Wall -Wextra -Werror -pedantic
-LDFLAGS=-lboost_program_options-mt
+CFLAGS=-W -Wall -Wextra -Werror -pedantic -ansi
+ARGTABLE_PATH=./argtable2
+ARGTABLEI=-I$(ARGTABLE_PATH)/include
+ARGTABLEL=$(ARGTABLE_PATH)/lib
+ARGTABLEO=$(ARGTABLEL)/libargtable2.a
+LDFLAGS=-L$(ARGTABLEL)
+LDLIBS=-largtable2
 SOURCES:=$(wildcard *.cpp)
-BOOST=/usr/include/boost
+OBJECTS:=$(SOURCES:.cpp=.o)
 EXECUTABLE=dlv-server
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): $(SOURCES) message.h
-	$(CC) $(CFLAGS) $(LDFLAGS) -I $(BOOST) $(SOURCES) -o $@
+$(EXECUTABLE): $(OBJECTS)
+	$(CC) $(LDFLAGS) $(OBJECTS) $(ARGTABLEO) -o $(EXECUTABLE)
+
+$(EXECUTABLE)-dynamic: $(OBJECTS)
+	$(CC) $(LDFLAGS) $(OBJECTS) -o $(EXECUTABLE) $(LDLIBS)
+
+dlv-server.o: $(SOURCES) message.h
+	$(CC) $(CFLAGS) -c $(ARGTABLEI) $< -o $@
 
 clean:
-	-rm -f $(EXECUTABLE)
+	-rm -f $(OBJECTS) $(EXECUTABLE)
