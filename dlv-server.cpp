@@ -155,7 +155,6 @@ int main(int argc, char *argv[]) {
 	log_file->filename[0] =  "queries.log";
 	log_l->ival[0] = 1;
 
-
 	int nerrors = arg_parse(argc, argv, argtable);
 
 	if(help->count > 0) {
