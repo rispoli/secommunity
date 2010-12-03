@@ -3,7 +3,7 @@
 
 struct msg_c2s {
 	char query[1024];
-	char aggregate_query[5]; // count, sum, times, min, max
+	char aggregate_query[7]; // count, sum, times, min, max
 	int msg_type;
 };
 
