@@ -1,22 +1,67 @@
 #include <argtable2.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include <fstream>
 #include <iostream>
 #include "message.h"
-#include <netinet/in.h>
 #include <signal.h>
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 using namespace std;
 
+#if defined (WIN32) && !defined (__CYGWIN32__) // It's not Unix, really. See? Capital letters.
+
+#define __WINDOWS
+
+#pragma comment(lib, "Ws2_32.lib") // link with Ws2_32.lib
+
+#define _WIN32_WINNT 0x501 // To get getaddrinfo && freeaddrinfo working with MinGW.
+#include <stdio.h>
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+#define DIR_TEMP_FILES ".\\"
+#define SCAST const char
+#define RCAST char
+#define getpid() GetCurrentProcessId()
+
+string executable_path;
+string options;
+string kb_fn;
+string log_fn;
+int log_level;
+struct in_addr sin_addr;
+
+#else
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+#define DIR_TEMP_FILES "/tmp/"
+#define SCAST void
+#define RCAST void
+#define closesocket(fd) close(fd)
+
+#endif
+
+#ifdef __WINDOWS
+void log_message(string filename, string message);
+BOOL CtrlHandler(DWORD) {
+	if(log_level > 0)
+		log_message(log_fn, "server stopped");
+
+	WSACleanup();
+
+	return 0;
+}
+#else
 int termination_pipe[2];
 
 void sig_handler(int) {
@@ -25,6 +70,7 @@ void sig_handler(int) {
 	fclose(p);
 	close(termination_pipe[1]);
 }
+#endif
 
 void log_message(string filename, string message) {
 	FILE *logfile = fopen(filename.c_str(), "a");
@@ -44,24 +90,29 @@ void delete_file(const char *filename) {
 		cerr << "Could not delete temp. file: " << *filename << " (" << errno << ")" << endl;
 }
 
+#ifdef __WINDOWS
+DWORD WINAPI handle_query(void *lp) {
+	int &sock_fd = *(int *)lp;
+#else
 int handle_query(string executable_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr) {
+#endif
 
 	struct msg_c2s query;
 	memset(query.query, 0, sizeof(query.query));
-	if(recv(sock_fd, (void *)&query, sizeof(query), 0) == -1) {
+	if(recv(sock_fd, (RCAST *)&query, sizeof(query), 0) == -1) {
 		cerr << "Could not receive data (" << errno << ")" << endl;
-		close(sock_fd);
+		closesocket(sock_fd);
 		return 1;
 	}
 
 	stringstream pid_time; pid_time << getpid() << "_" << time(NULL);
-	stringstream query_fn; query_fn << "/tmp/dlv-query_" << pid_time.str();
+	stringstream query_fn; query_fn << DIR_TEMP_FILES << "dlv-query_" << pid_time.str();
 	string command = executable_path + options + " " + kb_fn + " " + query_fn.str() + " 2>&1";
 
 	ofstream query_f(query_fn.str().c_str());
 	if(!query_f.is_open()) {
 		cerr << "Could not write temp. file: " << query_fn.str() << endl;
-		close(sock_fd);
+		closesocket(sock_fd);
 		return 1;
 	}
 	if(query.msg_type == SIMPLEQUERY)
@@ -76,7 +127,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 
 	if(!(fpipe = popen(command.c_str(), "r"))) {
 		cerr << "Could not execute command: " << command << " (" << errno << ")" << endl;;
-		close(sock_fd);
+		closesocket(sock_fd);
 		delete_file(query_fn.str().c_str());
 		return 1;
 	}
@@ -107,14 +158,14 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		}
 	}
 
-	if(send(sock_fd, (void *)&answer, sizeof(answer), 0) == -1) {
+	if(send(sock_fd, (SCAST *)&answer, sizeof(answer), 0) == -1) {
 		cerr << "Could not send answer (" << errno << ")" << endl;;
-		close(sock_fd);
+		closesocket(sock_fd);
 		delete_file(query_fn.str().c_str());
 		return 1;
 	}
 
-	close(sock_fd);
+	closesocket(sock_fd);
 	delete_file(query_fn.str().c_str());
 
 	if(log_level > 0) {
@@ -128,20 +179,37 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	return 0;
 }
 
+void closesocket_and_cleanup(int sock_fd) {
+	closesocket(sock_fd);
+#ifdef __WINDOWS
+	WSACleanup();
+#endif
+}
+
 int main(int argc, char *argv[]) {
 
+#ifdef __WINDOWS
+	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
+#else
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
+#endif
 
 	struct arg_lit *help = arg_lit0("h", "help", "print this help and exit");
+#ifndef __WINDOWS
 	struct arg_lit *daemon = arg_lit0("d", "daemon", "run in background");
+#endif
 	struct arg_file *executable = arg_file0("e", "executable", NULL, "dlv executable path (default: /usr/bin/dlv)");
 	struct arg_file *knowledge_base = arg_file0("k", "knowledge-base", NULL, "knowledge base path (default: kb.dlv)");
 	struct arg_int *port_number = arg_int0("p", "port-number", NULL, "port number to listen on (default: 3333)");
 	struct arg_file *log_file = arg_file0("L", "log-file", NULL, "log-file path (default: queries.log)");
 	struct arg_int *log_l = arg_int0("l", "log-level", NULL, "0 - off, 1 - default, 2 - verbose");
 	struct arg_end *end = arg_end(23);
+#ifdef __WINDOWS
+	void *argtable[] = {help, executable, knowledge_base, port_number, log_file, log_l, end};
+#else
 	void *argtable[] = {help, daemon, executable, knowledge_base, port_number, log_file, log_l, end};
+#endif
 
 	if(arg_nullcheck(argtable) != 0) {
 		cerr << "Could not allocate enough memory for command line arguments" << endl;
@@ -171,6 +239,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+#ifndef __WINDOWS
 	if(daemon->count > 0) {
 		int pid = fork();
 		if(pid < 0) {
@@ -179,20 +248,47 @@ int main(int argc, char *argv[]) {
 		} else if(pid > 0) return 0;
 		setsid();
 	}
+#endif
 
+#ifdef __WINDOWS
+	executable_path = executable->filename[0];
+	options = " -silent";
+	kb_fn = knowledge_base->filename[0];
+	int port_no = port_number->ival[0];
+	log_fn = log_file->filename[0];
+	log_level = log_l->ival[0];
+#else
 	string executable_path = executable->filename[0];
 	string options = " -silent";
 	string kb_fn = knowledge_base->filename[0];
 	int port_no = port_number->ival[0];
 	string log_fn = log_file->filename[0];
 	int log_level = log_l->ival[0];
+#endif
 
 	arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
 
+#ifndef __WINDOWS
 	if(pipe(termination_pipe) == -1) {
 		cerr << "Could not create pipe (" << errno << ")" << endl;
 		return 1;
 	}
+#endif
+
+#ifdef __WINDOWS
+	WSADATA wsaData;
+
+	if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+		cerr << "Could not find Winsock dll" << endl;
+		return ERROR;
+	}
+
+	if(LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
+		cerr << "Wrong Winsock version" << endl;
+		WSACleanup();
+		return ERROR;
+	}
+#endif
 
 	int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if(sock_fd == -1) {
@@ -203,7 +299,7 @@ int main(int argc, char *argv[]) {
 	int rc = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, (char *)&on, sizeof(on));
 	if(rc == -1) {
 		cerr << "Could not set socket options (" << errno << ")" << endl;
-		close(sock_fd);
+		closesocket_and_cleanup(sock_fd);
 		return 1;
 	}
 
@@ -214,17 +310,20 @@ int main(int argc, char *argv[]) {
 	serv_addr.sin_port = htons(port_no);
 	if(bind(sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1) {
 		cerr << "Could not bind port: " << port_no << endl;
-		close(sock_fd);
+		closesocket_and_cleanup(sock_fd);
 		return 1;
 	}
 	listen(sock_fd, SOMAXCONN);
 	stringstream startup; startup << "server started (pid: " << getpid() << "), listening on port: " << port_no << ", dlv: " << executable_path << ", knowledge base: " << kb_fn;
 	if(log_level > 0)
 		log_message(log_fn, startup.str());
+#ifndef __WINDOWS
 	signal(SIGCHLD, SIG_IGN);
 	fd_set fd_set_s;
+#endif
 	int new_sock_fd, cli_len = sizeof(cli_addr);
 	while(1) {
+#ifndef __WINDOWS
 		do {
 			FD_ZERO(&fd_set_s);
 			FD_SET(sock_fd, &fd_set_s);
@@ -248,8 +347,13 @@ int main(int argc, char *argv[]) {
 			FD_CLR(termination_pipe[0], &fd_set_s);
 			break;
 		}
+#endif
 
 		if((new_sock_fd = accept(sock_fd, (struct sockaddr *)&cli_addr, (socklen_t *)&cli_len)) != -1) {
+#ifdef __WINDOWS
+			sin_addr = cli_addr.sin_addr;
+			CreateThread(0, 0, &handle_query, (void *)&new_sock_fd , 0, 0);
+#else
 			int pid;
 			switch(pid = fork()) {
 				case -1:
@@ -263,12 +367,15 @@ int main(int argc, char *argv[]) {
 				default:
 					close(new_sock_fd);
 			}
+#endif
 		} else {
 			cerr << "Could not accept connection (" << errno << ")" << endl;
-			close(sock_fd);
+			closesocket_and_cleanup(sock_fd);
 			return 1;
 		}
 	}
+
+	closesocket_and_cleanup(sock_fd);
 
 	if(log_level > 0)
 		log_message(log_fn, "server stopped");

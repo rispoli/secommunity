@@ -13,13 +13,20 @@ EXECUTABLE=dlv-server
 all: $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
-	$(CC) $(LDFLAGS) $(OBJECTS) $(ARGTABLEO) -o $(EXECUTABLE)
+	$(CC) $(LDFLAGS) $(OBJECTS) $(ARGTABLEO) -o $@
 
 $(EXECUTABLE)-dynamic: $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $(EXECUTABLE) $(LDLIBS)
+
+# Can be cross-compiled with MinGW: s/CC/MINGW/ & appropriate argtable2
+$(EXECUTABLE)-windows: $(OBJECTS)
+	$(CC) $(LDFLAGS) $(OBJECTS) $(ARGTABLEO) -o $(EXECUTABLE).exe -lws2_32
+
+$(EXECUTABLE)-windows-dynamic: $(OBJECTS)
+	$(CC) $(LDFLAGS) $(OBJECTS) -o $(EXECUTABLE).exe -lws2_32 $(LDLIBS)
 
 dlv-server.o: $(SOURCES) message.h
 	$(CC) $(CFLAGS) -c $(ARGTABLEI) $< -o $@
 
 clean:
-	-rm -f $(OBJECTS) $(EXECUTABLE)
+	-rm -f $(OBJECTS) $(EXECUTABLE) $(EXECUTABLE).exe
