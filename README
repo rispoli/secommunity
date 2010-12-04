@@ -1,0 +1,53 @@
+Compilation:
+------------
+  *NIX Compilation:
+  -----------------
+    IF: You already have argtable2 installed and working on your system
+      - Update argtable2's path for the include and the static library in
+      the makefile
+      - (If everything else is correct) make (or make dlv-server-dynamic if
+      you prefer to have argtable2 dynamically linked)
+    ELSE
+      - Fetch argtable2 from http://argtable.sourceforge.net/
+      - Follow the instructions in the package to compile/install the library
+      (if you plan to use it only for this software we advise you to use
+      'path_to_this_folder/argtable2' as a prefix in the 'configure' command:
+      doing so you won't have to edit the makefile)
+      - (If everything else is correct) make (or make dlv-server-dynamic if
+      you prefer to have argtable2 dynamically linked)
+
+  Windows Compilation:
+  --------------------
+    We only compiled the software using MinGW/MSYS and therefore advise you
+    to do the same unless you are familiar with the intricacies of compiling
+    C++ code for the Windows platform.
+    If you choose the MinGW/MSYS way follow the *NIX instructions provided in
+    this document (pay attention to the compiler's path, it most certainly will
+    be different from its *NIX counterpart: adjust the makefile accordingly;
+    the '-ansi' flag in CFLAGS may cause problems under Windows, if the
+    software fails to compile try removing it before submitting error reports).
+
+  Cross-compilation from *NIX to Windows using MinGW:
+  ---------------------------------------------------
+    - Unless you already have you should cross-compile argtable2 (instructions
+    in the package)
+    - Edit makefile to substitute g++ with the appropriate MinGW counterpart
+    - (If everything else is correct) make (or make dlv-server-dynamic if you
+    prefer to have argtable2 dynamically linked; the '-ansi' flag in CFLAGS
+    may cause problems under Windows, if the software fails to compile try
+    removing it before submitting error reports)
+
+  If you want to use the Windows binary thusly produced on machines that do
+  not have the necessary compilation environment installed we advise you to
+  add a '-static' flag after '-lws2_32' in the makefile.
+
+
+Usage:
+------
+  'dlv-server[.exe] --help' for online help.
+  examples/*.dlv for Knowledge Bases and Queries examples.
+
+  Differences between *NIX and Windows:
+    - right now the software can work in background only in *NIX environments
+    - in Windows, when writing a path on the command line (e.g.: dlv-server.exe
+    -e X:\\path\\to\\dlv.exe ...), remember to use '\\' as folder separator
