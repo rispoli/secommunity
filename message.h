@@ -11,6 +11,6 @@ struct msg_c2s {
 #define ERROR -1
 
 struct msg_s2c {
-	char result[128];
+	char result[256];
 	int status;
 };

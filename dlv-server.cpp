@@ -95,6 +95,7 @@ DWORD WINAPI handle_query(void *lp) {
 	int &sock_fd = *(int *)lp;
 #else
 int handle_query(string executable_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr) {
+	signal(SIGCHLD, SIG_DFL);
 #endif
 
 	struct msg_c2s query;
@@ -135,24 +136,21 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	stringstream c_output;
 	while(fgets(buffer_p, sizeof(buffer_p), fpipe))
 		c_output << buffer_p;
-	pclose(fpipe);
+	int exit_status = pclose(fpipe);
 
 	struct msg_s2c answer;
 	memset(answer.result, 0, sizeof(answer.result));
 
-	if(c_output.str().find("parser errors") != string::npos) {
-		strcpy(answer.result, "Aborted due to parser errors");
+	if(WEXITSTATUS(exit_status)) {
+		strncpy(answer.result, c_output.str().c_str(), sizeof(answer.result));
 		answer.status = ERROR;
-	} else if(query.msg_type == SIMPLEQUERY) {
-		strcpy(answer.result, c_output.str() == "" ? "1" : "0");
-		answer.status = SUCCESS;
-	} else if(query.msg_type == AGGREGATEQUERY) {
-		stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
-		size_t p;
-		if((p = c_output.str().find(str_to_search.str())) == string::npos) {
-			strcpy(answer.result, "Could not perform aggregate query");
-			answer.status = ERROR;
-		} else {
+	} else {
+		if(query.msg_type == SIMPLEQUERY) {
+			strcpy(answer.result, c_output.str() == "" ? "1" : "0");
+			answer.status = SUCCESS;
+		} else if(query.msg_type == AGGREGATEQUERY) {
+			stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
+			size_t p = c_output.str().find(str_to_search.str());
 			strcpy(answer.result, c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1).c_str());
 			answer.status = SUCCESS;
 		}
