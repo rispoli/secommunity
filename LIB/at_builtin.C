@@ -107,10 +107,10 @@ extern "C" {
 #endif
 
 	BUILTIN(at, ii) {
-		if(argv[0].isString() && (argv[1].isSymbol() || argv[1].isString())) {
+		if(argv[0].isString() && argv[1].isSymbol()) {
 
 			string iporhostname(argv[0].toString());
-			string query(argv[1].isSymbol() ? argv[1].toSymbol() : argv[1].toString());
+			string query(argv[1].toSymbol());
 
 			return process_query(iporhostname, query, SIMPLEQUERY, "") == SUCCESS;
 

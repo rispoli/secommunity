@@ -2,7 +2,7 @@
 #define AGGREGATEQUERY 1
 
 struct msg_c2s {
-	char query[1024];
+	char query[256];
 	char aggregate_query[5]; // count, sum, times, min, max
 	int msg_type;
 };
