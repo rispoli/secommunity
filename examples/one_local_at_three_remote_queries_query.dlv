@@ -1,0 +1,9 @@
+#include <at_builtin>
+
+source(a).
+source(b).
+source(c).
+
+category(c1).
+
+pca(P, C) :- source(P), category(C), #at("localhost", pca(P, C)).
