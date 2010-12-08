@@ -18,8 +18,6 @@ using namespace std;
 
 #define __WINDOWS
 
-#pragma comment(lib, "Ws2_32.lib") // link with Ws2_32.lib
-
 #define _WIN32_WINNT 0x501 // To get getaddrinfo && freeaddrinfo working with MinGW.
 #include <stdio.h>
 #include <windows.h>
@@ -30,6 +28,7 @@ using namespace std;
 #define SCAST const char
 #define RCAST char
 #define getpid() GetCurrentProcessId()
+#define WEXITSTATUS(stat_val) ((unsigned)(stat_val))
 
 string executable_path;
 string options;
@@ -143,16 +142,16 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 
 	if(WEXITSTATUS(exit_status)) {
 		strncpy(answer.result, c_output.str().c_str(), sizeof(answer.result));
-		answer.status = ERROR;
+		answer.status = DLV_ERROR;
 	} else {
 		if(query.msg_type == SIMPLEQUERY) {
 			strcpy(answer.result, c_output.str() == "" ? "1" : "0");
-			answer.status = SUCCESS;
+			answer.status = DLV_SUCCESS;
 		} else if(query.msg_type == AGGREGATEQUERY) {
 			stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
 			size_t p = c_output.str().find(str_to_search.str());
 			strcpy(answer.result, c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1).c_str());
-			answer.status = SUCCESS;
+			answer.status = DLV_SUCCESS;
 		}
 	}
 
@@ -170,7 +169,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		stringstream message;
 		message << "received message from: " << inet_ntoa(sin_addr);
 		if(log_level > 1)
-			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query.query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == SUCCESS ? (c_output.str() == "" ? "true" : "false") : answer.result);
+			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query.query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == DLV_SUCCESS ? (c_output.str() == "" ? "true" : "false") : answer.result);
 		log_message(log_fn, message.str());
 	}
 
@@ -278,13 +277,13 @@ int main(int argc, char *argv[]) {
 
 	if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		cerr << "Could not find Winsock dll" << endl;
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	if(LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
 		cerr << "Wrong Winsock version" << endl;
 		WSACleanup();
-		return ERROR;
+		return DLV_ERROR;
 	}
 #endif
 

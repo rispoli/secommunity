@@ -43,7 +43,7 @@
 			string query(argv[1].toString()); \
 			int r = process_query(iporhostname, query, AGGREGATEQUERY, #function); \
 			argv[2] = CONSTANT(r); \
-			return r != ERROR; \
+			return r != DLV_ERROR; \
 		} \
 		return false; \
 	}
@@ -69,13 +69,13 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 
 	if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		cerr << "Could not find Winsock dll" << endl;
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	if(LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
 		cerr << "Wrong Winsock version" << endl;
 		WSACleanup();
-		return ERROR;
+		return DLV_ERROR;
 	}
 #endif
 
@@ -89,7 +89,7 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 #ifdef __WINDOWS
 		WSACleanup();
 #endif
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	for(p = serv_info; p != NULL; p = p->ai_next) {
@@ -114,7 +114,7 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 		cerr << "Failed to connect" << endl;
 		close_and_cleanup(sock_fd);
 		freeaddrinfo(serv_info);
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	freeaddrinfo(serv_info);
@@ -124,7 +124,7 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 	if(query.size() > sizeof(msg.query)) {
 		cerr << "Network buffer size exceeded: split '" << query << "'" << endl;
 		close_and_cleanup(sock_fd);
-		return ERROR;
+		return DLV_ERROR;
 	}
 	strncpy(msg.query, query.c_str(), sizeof(msg.query));
 	strncpy(msg.aggregate_query, aggregate_query.c_str(), sizeof(msg.aggregate_query));
@@ -132,7 +132,7 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1) {
 		cerr << "Could not send query (" << errno << ")" << endl;;
 		close_and_cleanup(sock_fd);
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	struct msg_s2c answer;
@@ -140,14 +140,14 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 	if(recv(sock_fd, (RCAST *)&answer, sizeof(answer), 0) == -1) {
 		cerr << "Could not receive result (" << errno << ")" << endl;
 		close_and_cleanup(sock_fd);
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	close_and_cleanup(sock_fd);
 
-	if(answer.status == ERROR) {
+	if(answer.status == DLV_ERROR) {
 		cerr << iporhostname << ":" << port << " says: " << answer.result << endl;
-		return ERROR;
+		return DLV_ERROR;
 	}
 
 	return atoi(answer.result);
@@ -163,7 +163,7 @@ extern "C" {
 			string iporhostname(argv[0].toString());
 			string query(argv[1].isSymbol() ? argv[1].toSymbol() : argv[1].toString());
 
-			return process_query(iporhostname, query, SIMPLEQUERY, "") == SUCCESS;
+			return process_query(iporhostname, query, SIMPLEQUERY, "") == DLV_SUCCESS;
 
 		}
 

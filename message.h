@@ -7,8 +7,8 @@ struct msg_c2s {
 	int msg_type;
 };
 
-#define SUCCESS 1
-#define ERROR -1
+#define DLV_SUCCESS 1
+#define DLV_ERROR -1
 
 struct msg_s2c {
 	char result[256];
