@@ -1,5 +1,5 @@
-Compilation:
-------------
+Server Compilation:
+-------------------
   *NIX Compilation:
   -----------------
     IF: You already have argtable2 installed and working on your system
@@ -40,6 +40,33 @@ Compilation:
   If you want to use the Windows binary thusly produced on machines that do
   not have the necessary compilation environment installed we advise you to
   add a '-static' flag after '-lws2_32' in the makefile.
+
+
+External Predicates Compilation:
+--------------------------------
+  GNU/Linux Compilation:
+  ----------------------
+    - Download the necessary files from the DLV-EX Project's website
+    (https://www.mat.unical.it/ianni/wiki/dlvex): they can be found in the
+    "Scripts and Headers" subsection of the "Download" section
+    - Unpack the archive and copy every file from the newly create LIB folder
+    to the LIB subfolder of this very folder and change your current directory
+    to the LIB subfolder
+    - Issue the command './dynamic at_builtin' and wait until the predicates
+    finish to compile
+  Windows Compilation:
+  --------------------
+    We only compiled the software using MinGW/MSYS and therefore advise you
+    to do the same unless you are familiar with the intricacies of compiling
+    C++ code for the Windows platform.
+    - Follow the first two steps of the GNU/Linux Compilation guide
+    - Edit the file 'dlvlib' so that the line that used to be:
+      'libtool --mode=link [...] -lm'
+    becomes:
+      'libtool --mode=link [...] -lm -lws2_32'
+    (just add '-lws2_32' to the end of the line)
+    - Issue the command './dlvlib create at_builtin' and wait until the
+    predicates finish to compile
 
 
 Usage:
