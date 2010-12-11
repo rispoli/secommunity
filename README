@@ -1,73 +1,4 @@
-Server Compilation:
--------------------
-  *NIX Compilation:
-  -----------------
-    IF: You already have argtable2 installed and working on your system
-      - Update argtable2's path for the include and the static library in
-      the makefile
-      - (If everything else is correct) make (or make dlv-server-dynamic if
-      you prefer to have argtable2 dynamically linked)
-    ELSE
-      - Fetch argtable2 from http://argtable.sourceforge.net/
-      - Follow the instructions in the package to compile/install the library
-      (if you plan to use it only for this software we advise you to use
-      'path_to_this_folder/argtable2' as a prefix in the 'configure' command:
-      doing so you won't have to edit the makefile)
-      - (If everything else is correct) make (or make dlv-server-dynamic if
-      you prefer to have argtable2 dynamically linked)
-
-  Windows Compilation:
-  --------------------
-    We only compiled the software using MinGW/MSYS and therefore advise you
-    to do the same unless you are familiar with the intricacies of compiling
-    C++ code for the Windows platform.
-    If you choose the MinGW/MSYS way follow the *NIX instructions provided in
-    this document (pay attention to the compiler's path, it most certainly will
-    be different from its *NIX counterpart: adjust the makefile accordingly;
-    the '-ansi' flag in CFLAGS may cause problems under Windows, if the
-    software fails to compile try removing it before submitting error reports).
-
-  Cross-compilation from *NIX to Windows using MinGW:
-  ---------------------------------------------------
-    - Unless you already have you should cross-compile argtable2 (instructions
-    in the package)
-    - Edit makefile to substitute g++ with the appropriate MinGW counterpart
-    - (If everything else is correct) make (or make dlv-server-dynamic if you
-    prefer to have argtable2 dynamically linked; the '-ansi' flag in CFLAGS
-    may cause problems under Windows, if the software fails to compile try
-    removing it before submitting error reports)
-
-  If you want to use the Windows binary thusly produced on machines that do
-  not have the necessary compilation environment installed we advise you to
-  add a '-static' flag after '-lws2_32' in the makefile.
-
-
-External Predicates Compilation:
---------------------------------
-  GNU/Linux Compilation:
-  ----------------------
-    - Download the necessary files from the DLV-EX Project's website
-    (https://www.mat.unical.it/ianni/wiki/dlvex): they can be found in the
-    "Scripts and Headers" subsection of the "Download" section
-    - Unpack the archive and copy every file from the newly create LIB folder
-    to the LIB subfolder of this very folder and change your current directory
-    to the LIB subfolder
-    - Issue the command './dynamic at_builtin' and wait until the predicates
-    finish to compile
-  Windows Compilation:
-  --------------------
-    We only compiled the software using MinGW/MSYS and therefore advise you
-    to do the same unless you are familiar with the intricacies of compiling
-    C++ code for the Windows platform.
-    - Follow the first two steps of the GNU/Linux Compilation guide
-    - Edit the file 'dlvlib' so that the line that used to be:
-      'libtool --mode=link [...] -lm'
-    becomes:
-      'libtool --mode=link [...] -lm -lws2_32'
-    (just add '-lws2_32' to the end of the line)
-    - Issue the command './dlvlib create at_builtin' and wait until the
-    predicates finish to compile
-
+:<<DLV-Server README file
 
 Usage:
 ------
@@ -78,3 +9,79 @@ Usage:
     - right now the software can work in background only in *NIX environments
     - in Windows, when writing a path on the command line (e.g.: dlv-server.exe
     -e X:\\path\\to\\dlv.exe ...), remember to use '\\' as folder separator
+
+
+How to use the examples:
+------------------------
+  Every remote query in these files asks a local instance of the dlv-server to
+  handle its requests; if needed you should change the various 'localhost' in
+  the *_query.dlv files to contact the right address for the instance of the
+  dlv-server that you have available.
+  In the following commands we will use $DLC to indicate the DLV-Complex
+  executable, when you try these on your machine substiture $DLC with the actual
+  path for DLV-Complex; ours was:
+    > DLC=../bin/dl-complex.linux.20100303.beta
+  but yours, of course, can be anything you want.
+
+  local_*:
+  --------
+    This example does not require dlv-server, just use the command:
+      > $DLC examples/local_kb.dlv examples/local_query.dlv
+
+  remote_kb_*, remote_query.dlv:
+  ------------------------------
+    This example does two remote queries and a local one:
+      > ./dlv-server -e $DLC -k examples/remote_kb_omega1.dlv -d
+      > ./dlv-server -e $DLC -k examples/remote_kb_omega2.dlv -d -p 3334
+      > $DLC examples/remote_kb_omega.dlv examples/remote_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
+  remote_count_*:
+  ---------------
+    This example does two remote aggregate queries:
+      > ./dlv-server -e $DLC -k examples/remote_count_kb_omega1.dlv -d
+      > ./dlv-server -e $DLC -k examples/remote_count_kb_omega2.dlv -d -p 3334
+      > $DLC examples/remote_count_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
+  remote_aggregate_*:
+  -------------------
+    This example is from the DLV User Manual
+    (http://www.dlvsystem.com/dlvsystem/html/DLV_User_Manual.html#AEN814) and
+    does one query for every (remote) aggregate function available in the system:
+      > ./dlv-server -e $DLC -k examples/remote_aggregate_kb.dlv -d
+      > $DLC examples/remote_aggregate_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
+  one_local_at_three_remote_queries_*:
+  ------------------------------------
+    This example has only one #at statement in the [...]_query.dlv file but,
+    since DLV-Complex has to compute all of the answer set, that gets translated
+    in as many remote inquiries to the server as the number of 'source(...).'
+    facts in the [...]_kb.dlv file:
+      > ./dlv-server -e $DLC -k examples/one_local_at_three_remote_queries_kb.dlv -d
+      > $DLC examples/one_local_at_three_remote_queries_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
+  double_remote_*:
+  ----------------
+    This example shows how a query to a remote knowledge base can trigger
+    another remote query that the latter presents to a third instance of our
+    server:
+      > ./dlv-server -e $DLC -k examples/double_remote_count_kb_omega1.dlv -d
+      > ./dlv-server -e $DLC -k examples/double_remote_count_kb_omega2.dlv -d -p 3334
+      > ./dlv-server -e $DLC -k examples/double_remote_count_kb_omega3.dlv -d -p 3335
+      > $DLC examples/double_remote_count_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
+N.B.:
+-----
+  This README file is composed using Donald E. Knuth literate programming
+  approach: if you are on a *NIX system and have compiled correctly all of our
+  software then you can issue 'bash README' to run the examples above (provided
+  that the executable for DLV-Complex is in the right place).
+
+End of the README file for:
+DLV-Server
+
+cat README | grep '^\s\s*> ' | sed -e 's/^\s*> //' | bash
