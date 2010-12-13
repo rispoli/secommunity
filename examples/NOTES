@@ -1,0 +1,8 @@
+Notes:
+------
+  Between these examples and the accompanying paper the following equivalences
+  hold:
+    says(S, pca(P, C)) <==> pcas(S, P, C)
+    says(S, neg(pca(P, C))) <==> not pcas(S, P, C)
+  where S, P, C are variables ranging over Sources, Principals and Categories
+  respectively and with 'not' we mean DLV's classical negation, not NAF.
