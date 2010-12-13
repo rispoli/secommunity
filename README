@@ -76,7 +76,7 @@ How to use the examples:
 
 N.B.:
 -----
-  This README file is composed using Donald E. Knuth literate programming
+  This README file is composed using Donald E. Knuth's literate programming
   approach: if you are on a *NIX system and have compiled correctly all of our
   software then you can issue 'bash README' to run the examples above (provided
   that the executable for DLV-Complex is in the right place).
