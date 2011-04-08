@@ -6,4 +6,4 @@ source(c).
 
 category(c1).
 
-pca(P, C) :- source(P), category(C), #at("localhost", pca(P, C)).
+pca(P, C) :- source(P), category(C), #at("127.0.0.1", pca(P, C)).

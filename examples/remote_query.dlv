@@ -1,3 +1,3 @@
 #include <at_builtin>
 
-majority(pca(p, c5)) :- #at("localhost:3333", majority(pca(p, c6))), #at("localhost:3334", majority(pca(p, c7))), not neg(pca(p, c5)).
+majority(pca(p, c5)) :- #at("127.0.0.1:3333", majority(pca(p, c6))), #at("127.0.0.1:3334", majority(pca(p, c7))), not neg(pca(p, c5)).

@@ -11,7 +11,7 @@ principal(b).
 principal(p).
 
 says(a, pca(p, c2)).
-says(b, pca(p, c2)) :- #at("127.0.0.1:3335", box(pca(p, c3))).
+says(b, pca(p, c2)) :- #at("127.0.0.1:3333", box(pca(p, c1))).
 
 box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
 

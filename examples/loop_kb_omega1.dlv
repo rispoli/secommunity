@@ -4,14 +4,14 @@
 source(a).
 source(b).
 
-category(c2).
+category(c1).
 
 principal(a).
 principal(b).
 principal(p).
 
-says(a, pca(p, c2)).
-says(b, pca(p, c2)) :- #at("127.0.0.1:3335", box(pca(p, c3))).
+says(a, pca(p, c1)).
+says(b, pca(p, c1)) :- #at("127.0.0.1:3334", box(pca(p, c2))).
 
 box(Phi) :- says(_, Phi), #count{X : says(X, Phi), source(X)} = R, #count{Y : source(Y)} = R.
 
