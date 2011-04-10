@@ -74,6 +74,16 @@ How to use the examples:
       > $DLC examples/double_remote_count_query.dlv
       > kill `pidof -o %PPID dlv-server`
 
+  loop_*:
+  -------
+    This example shows how loops in the remote requests to the various knowledge
+    bases get detected and the further execution of the code promptly stopped to
+    avoid bringing down the machine:
+      > ./dlv-server -e $DLC -k examples/loop_kb_omega1.dlv -d
+      > ./dlv-server -e $DLC -k examples/loop_kb_omega2.dlv -d -p 3334
+      > $DLC examples/loop_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
 N.B.:
 -----
   This README file is composed using Donald E. Knuth's literate programming

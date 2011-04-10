@@ -43,6 +43,8 @@
 #include "extpred.h"
 #include <iostream>
 #include "../message.h"
+#include <sstream>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string>
 #include <string.h>
@@ -51,8 +53,6 @@
 #if defined (WIN32) && !defined (__CYGWIN32__) // It's not Unix, really. See? Capital letters.
 
 #define __WINDOWS
-
-#pragma comment(lib, "Ws2_32.lib") // link with Ws2_32.lib
 
 #define _WIN32_WINNT 0x501 // To get getaddrinfo && freeaddrinfo working with MinGW.
 #include <windows.h>
@@ -65,6 +65,7 @@
 
 #else
 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -78,15 +79,19 @@
 	BUILTIN(function##_at, iii) { \
 		return false; \
 	} \
-	BUILTIN(function##_at, iio) { \
+	BUILTIN(function##_at, iioi) { \
 		if(argv[0].isString() && argv[1].isString()) { \
 			string iporhostname(argv[0].toString()); \
 			string query(argv[1].toString()); \
-			int r = process_query(iporhostname, query, AGGREGATEQUERY, #function); \
+			string iplist_fn((argc == 4 && argv[3].isString()) ? argv[3].toString() : ""); \
+			int r = process_query(iporhostname, query, iplist_fn, AGGREGATEQUERY, #function); \
 			argv[2] = CONSTANT(r); \
 			return r != DLV_ERROR; \
 		} \
 		return false; \
+	} \
+	BUILTIN(function##_at, iio) { \
+		return function##_at_iioi(argv, argc); \
 	}
 
 void close_and_cleanup(int sock_fd) {
@@ -96,8 +101,13 @@ void close_and_cleanup(int sock_fd) {
 #endif
 }
 
-int process_query(string iporhostname, string query, int msg_type, string aggregate_query) {
-	int sock_fd = -1, rv;
+#ifdef __WINDOWS
+#include "ntop.h"
+#endif
+
+int process_query(string iporhostname, string query, string iplist_fn, int msg_type, string aggregate_query) {
+	int sock_fd = -1;
+	unsigned int rv;
 	string port("3333");
 
 	if((rv = iporhostname.find(":")) != string::npos) {
@@ -158,6 +168,17 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 		return DLV_ERROR;
 	}
 
+	char query_ip[INET6_ADDRSTRLEN];
+	struct sockaddr_in const *sin;
+	sin = (struct sockaddr_in *)serv_info->ai_addr;
+
+	if(inet_ntop(serv_info->ai_family, &sin->sin_addr, query_ip, sizeof(query_ip)) == NULL) {
+		cerr << "Could not get remote server's info" << endl;
+		close_and_cleanup(sock_fd);
+		freeaddrinfo(serv_info);
+		return DLV_ERROR;
+	}
+
 	freeaddrinfo(serv_info);
 
 	struct msg_c2s msg;
@@ -170,6 +191,43 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 	strncpy(msg.query, query.c_str(), sizeof(msg.query));
 	strncpy(msg.aggregate_query, aggregate_query.c_str(), sizeof(msg.aggregate_query));
 	msg.msg_type = msg_type;
+	int line_counter = 0;
+	if(iplist_fn != "") {
+		char ip_buf[INET6_ADDRSTRLEN + sizeof(":") + sizeof("65535")];
+		FILE *ipfile = fopen(iplist_fn.c_str(), "r");
+		if(!ipfile) {
+			cerr << "Could not open IP list" << endl;
+			close_and_cleanup(sock_fd);
+			return DLV_ERROR;
+		}
+		while(line_counter < MAX_DEPTH && fgets(ip_buf, sizeof(ip_buf), ipfile)) {
+			string line(ip_buf);
+			unsigned int rv;
+			if((rv = line.find(":")) != string::npos) {
+				msg.addresses[line_counter].port = atoi(line.substr(rv + 1, line.length() - rv).c_str());
+				memset(msg.addresses[line_counter].ip, 0, sizeof(msg.addresses[line_counter].ip));
+				strncpy(msg.addresses[line_counter].ip, line.substr(0, rv).c_str(), sizeof(msg.addresses[line_counter].ip));
+				if(atoi(port.c_str()) == msg.addresses[line_counter].port && !strcmp(query_ip, msg.addresses[line_counter].ip)) {
+					cerr << "Loop detected: aborting" << endl;;
+					close_and_cleanup(sock_fd);
+					return DLV_ERROR;
+				}
+			}
+			line_counter++;
+		}
+		fclose(ipfile);
+	}
+	if(line_counter != MAX_DEPTH) {
+		msg.addresses[line_counter].port = atoi(port.c_str());
+		memset(msg.addresses[line_counter].ip, 0, sizeof(msg.addresses[line_counter].ip));
+		strncpy(msg.addresses[line_counter].ip, query_ip, sizeof(msg.addresses[line_counter].ip));
+	} else {
+		cerr << "Maximum nesting depth reached: aborting" << endl;;
+		close_and_cleanup(sock_fd);
+		return DLV_ERROR;
+	}
+	msg.a_counter = line_counter + 1;
+
 	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1) {
 		cerr << "Could not send query (" << errno << ")" << endl;;
 		close_and_cleanup(sock_fd);
@@ -198,17 +256,22 @@ int process_query(string iporhostname, string query, int msg_type, string aggreg
 extern "C" {
 #endif
 
-	BUILTIN(at, ii) {
+	BUILTIN(at, iii) {
 		if(argv[0].isString() && argv[1].isSymbol()) {
 
 			string iporhostname(argv[0].toString());
 			string query(argv[1].toSymbol());
+			string iplist_fn((argc == 3 && argv[2].isString()) ? argv[2].toString() : "");
 
-			return process_query(iporhostname, query, SIMPLEQUERY, "") == DLV_SUCCESS;
+			return process_query(iporhostname, query, iplist_fn, SIMPLEQUERY, "") == DLV_SUCCESS;
 
 		}
 
 		return false;
+	}
+
+	BUILTIN(at, ii) {
+		return at_iii(argv, argc);
 	}
 
 	AGGREGATE(count)

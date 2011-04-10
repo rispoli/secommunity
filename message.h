@@ -19,13 +19,24 @@
 
 */
 
+#define INET6_ADDRSTRLEN 46
+
+struct address {
+	char ip[INET6_ADDRSTRLEN];
+	int port;
+};
+
 #define SIMPLEQUERY 0
 #define AGGREGATEQUERY 1
+
+#define MAX_DEPTH 10
 
 struct msg_c2s {
 	char query[256];
 	char aggregate_query[7]; // count, sum, times, min, max
 	int msg_type;
+	struct address addresses[MAX_DEPTH];
+	int a_counter;
 };
 
 #define DLV_SUCCESS 1

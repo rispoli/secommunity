@@ -40,7 +40,6 @@ using namespace std;
 #define __WINDOWS
 
 #define _WIN32_WINNT 0x501 // To get getaddrinfo && freeaddrinfo working with MinGW.
-#include <stdio.h>
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -126,9 +125,53 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		return 1;
 	}
 
+	if(!strcmp(query.query, "")) {
+		closesocket(sock_fd);
+		return 1;
+	}
+
 	stringstream pid_time; pid_time << getpid() << "_" << time(NULL);
 	stringstream query_fn; query_fn << DIR_TEMP_FILES << "dlv-query_" << pid_time.str();
-	string command = executable_path + options + " " + kb_fn + " " + query_fn.str() + " 2>&1";
+	stringstream iplist_fn; iplist_fn << DIR_TEMP_FILES << "dlv-iplist_" << pid_time.str();
+	ofstream iplist_f(iplist_fn.str().c_str());
+	if(!iplist_f.is_open()) {
+		cerr << "Could not write temp. file: " << iplist_fn.str() << endl;
+		closesocket(sock_fd);
+		return 1;
+	}
+	for(int i = 0; i < query.a_counter; i++)
+		iplist_f << query.addresses[i].ip << ":" << query.addresses[i].port << endl;
+	iplist_f.close();
+
+	ifstream kb_f_b(kb_fn.c_str());
+	stringstream kb_fn_a; kb_fn_a << DIR_TEMP_FILES << "dlv-kb_" << pid_time.str();
+	ofstream kb_f_a(kb_fn_a.str().c_str());
+	if(!kb_f_b.is_open() || !kb_f_a.is_open()) {
+		cerr << "Could not open knowledge base" << endl;
+		closesocket(sock_fd);
+		return 1;
+	}
+
+	string line;
+	while(kb_f_b.good()) {
+		getline(kb_f_b, line);
+		unsigned int p_h = 0;
+		while((p_h = line.find("#", p_h)) != string::npos) {
+			unsigned int p_o;
+			if((p_o = line.find("(", p_h)) != string::npos && (!line.compare(p_h + 1, p_o - p_h - 1, "at") || !line.compare(p_h + 1, p_o - p_h - 1, "count_at") || !line.compare(p_h + 1, p_o - p_h - 1, "sum_at") || !line.compare(p_h + 1, p_o - p_h - 1, "times_at") || !line.compare(p_h + 1, p_o - p_h - 1, "min_at") || !line.compare(p_h + 1, p_o - p_h - 1, "max_at"))) {
+				unsigned int next_or_end = line.find("#", p_o);
+				unsigned int p_c = line.rfind(")", next_or_end);
+				line.insert(p_c, ", \"" + iplist_fn.str() + "\"");
+				p_h = p_c + iplist_fn.str().length();
+			} else p_h = string::npos;
+		}
+		kb_f_a << line << endl;
+	}
+
+	kb_f_b.close();
+	kb_f_a.close();
+
+	string command = executable_path + options + " " + kb_fn_a.str() + " " + query_fn.str() + " 2>&1";
 
 	ofstream query_f(query_fn.str().c_str());
 	if(!query_f.is_open()) {
@@ -150,6 +193,8 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not execute command: " << command << " (" << errno << ")" << endl;;
 		closesocket(sock_fd);
 		delete_file(query_fn.str().c_str());
+		delete_file(iplist_fn.str().c_str());
+		delete_file(kb_fn_a.str().c_str());
 		return 1;
 	}
 
@@ -163,6 +208,9 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 
 	if(WEXITSTATUS(exit_status)) {
 		strncpy(answer.result, c_output.str().c_str(), sizeof(answer.result));
+		answer.status = DLV_ERROR;
+	} else if(c_output.str().find("Loop detected: aborting") != string::npos) {
+		strncpy(answer.result, "Loop detected: aborting", sizeof(answer.result));
 		answer.status = DLV_ERROR;
 	} else {
 		if(query.msg_type == SIMPLEQUERY) {
@@ -180,11 +228,15 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not send answer (" << errno << ")" << endl;;
 		closesocket(sock_fd);
 		delete_file(query_fn.str().c_str());
+		delete_file(iplist_fn.str().c_str());
+		delete_file(kb_fn_a.str().c_str());
 		return 1;
 	}
 
 	closesocket(sock_fd);
 	delete_file(query_fn.str().c_str());
+	delete_file(iplist_fn.str().c_str());
+	delete_file(kb_fn_a.str().c_str());
 
 	if(log_level > 0) {
 		stringstream message;
