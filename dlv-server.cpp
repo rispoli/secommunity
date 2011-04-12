@@ -118,15 +118,33 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 #endif
 
 	struct msg_c2s query;
-	memset(query.query, 0, sizeof(query.query));
 	if(recv(sock_fd, (RCAST *)&query, sizeof(query), 0) == -1) {
 		cerr << "Could not receive data (" << errno << ")" << endl;
 		closesocket(sock_fd);
 		return 1;
 	}
 
-	if(!strcmp(query.query, "")) {
+	char *query_query = (char *)malloc(query.query_size + 1);
+	memset(query_query, 0, query.query_size + 1);
+	if(recv(sock_fd, (RCAST *)query_query, query.query_size, 0) == -1) {
+		cerr << "Could not receive data (" << errno << ")" << endl;
 		closesocket(sock_fd);
+		free(query_query);
+		return 1;
+	}
+
+	if(!strcmp(query_query, "")) {
+		closesocket(sock_fd);
+		free(query_query);
+		return 1;
+	}
+
+	struct address *query_addresses = (struct address *)malloc(query.a_counter * sizeof(struct address));
+	if(recv(sock_fd, (RCAST *)query_addresses, query.a_counter * sizeof(struct address), 0) == -1) {
+		cerr << "Could not receive data (" << errno << ")" << endl;
+		closesocket(sock_fd);
+		free(query_query);
+		free(query_addresses);
 		return 1;
 	}
 
@@ -137,10 +155,12 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	if(!iplist_f.is_open()) {
 		cerr << "Could not write temp. file: " << iplist_fn.str() << endl;
 		closesocket(sock_fd);
+		free(query_query);
+		free(query_addresses);
 		return 1;
 	}
 	for(int i = 0; i < query.a_counter; i++)
-		iplist_f << query.addresses[i].ip << ":" << query.addresses[i].port << endl;
+		iplist_f << query_addresses[i].ip << ":" << query_addresses[i].port << endl;
 	iplist_f.close();
 
 	ifstream kb_f_b(kb_fn.c_str());
@@ -149,6 +169,8 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	if(!kb_f_b.is_open() || !kb_f_a.is_open()) {
 		cerr << "Could not open knowledge base" << endl;
 		closesocket(sock_fd);
+		free(query_query);
+		free(query_addresses);
 		return 1;
 	}
 
@@ -177,12 +199,14 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	if(!query_f.is_open()) {
 		cerr << "Could not write temp. file: " << query_fn.str() << endl;
 		closesocket(sock_fd);
+		free(query_query);
+		free(query_addresses);
 		return 1;
 	}
 	if(query.msg_type == SIMPLEQUERY)
-		query_f << ":- " << query.query << ".";
+		query_f << ":- " << query_query << ".";
 	else if(query.msg_type == AGGREGATEQUERY)
-		query_f << "remote_" << query.aggregate_query << "_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #" << query.aggregate_query << "{" << query.query << "} = X_" << pid_time.str() << ".";
+		query_f << "remote_" << query.aggregate_query << "_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #" << query.aggregate_query << "{" << query_query << "} = X_" << pid_time.str() << ".";
 	query_f.close();
 
 	FILE *fpipe;
@@ -190,8 +214,10 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	memset(buffer_p, 0, sizeof(buffer_p));
 
 	if(!(fpipe = popen(command.c_str(), "r"))) {
-		cerr << "Could not execute command: " << command << " (" << errno << ")" << endl;;
+		cerr << "Could not execute command: " << command << " (" << errno << ")" << endl;
 		closesocket(sock_fd);
+		free(query_query);
+		free(query_addresses);
 		delete_file(query_fn.str().c_str());
 		delete_file(iplist_fn.str().c_str());
 		delete_file(kb_fn_a.str().c_str());
@@ -204,47 +230,52 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	int exit_status = pclose(fpipe);
 
 	struct msg_s2c answer;
-	memset(answer.result, 0, sizeof(answer.result));
 
+	string result;
 	if(WEXITSTATUS(exit_status)) {
-		strncpy(answer.result, c_output.str().c_str(), sizeof(answer.result));
+		result = c_output.str();
 		answer.status = DLV_ERROR;
 	} else if(c_output.str().find("Loop detected: aborting") != string::npos) {
-		strncpy(answer.result, "Loop detected: aborting", sizeof(answer.result));
+		result = "Loop detected: aborting";
 		answer.status = DLV_ERROR;
 	} else {
 		if(query.msg_type == SIMPLEQUERY) {
-			strcpy(answer.result, c_output.str() == "" ? "1" : "0");
+			result = c_output.str() == "" ? "1" : "0";
 			answer.status = DLV_SUCCESS;
 		} else if(query.msg_type == AGGREGATEQUERY) {
 			stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
-			size_t p = c_output.str().find(str_to_search.str());
-			strcpy(answer.result, c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1).c_str());
+			unsigned int p = c_output.str().find(str_to_search.str());
+			result = c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1);
 			answer.status = DLV_SUCCESS;
 		}
 	}
+	answer.result_size = result.size();
 
-	if(send(sock_fd, (SCAST *)&answer, sizeof(answer), 0) == -1) {
-		cerr << "Could not send answer (" << errno << ")" << endl;;
+	if(send(sock_fd, (SCAST *)&answer, sizeof(answer), 0) == -1 || send(sock_fd, (SCAST *)result.c_str(), result.size(), 0) == -1) {
+		cerr << "Could not send answer (" << errno << ")" << endl;
 		closesocket(sock_fd);
+		free(query_query);
+		free(query_addresses);
 		delete_file(query_fn.str().c_str());
 		delete_file(iplist_fn.str().c_str());
 		delete_file(kb_fn_a.str().c_str());
 		return 1;
 	}
 
-	closesocket(sock_fd);
-	delete_file(query_fn.str().c_str());
-	delete_file(iplist_fn.str().c_str());
-	delete_file(kb_fn_a.str().c_str());
-
 	if(log_level > 0) {
 		stringstream message;
 		message << "received message from: " << inet_ntoa(sin_addr);
 		if(log_level > 1)
-			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query.query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == DLV_SUCCESS ? (c_output.str() == "" ? "true" : "false") : answer.result);
+			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query_query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == DLV_SUCCESS ? (c_output.str() == "" ? "true" : "false") : result);
 		log_message(log_fn, message.str());
 	}
+
+	closesocket(sock_fd);
+	free(query_query);
+	free(query_addresses);
+	delete_file(query_fn.str().c_str());
+	delete_file(iplist_fn.str().c_str());
+	delete_file(kb_fn_a.str().c_str());
 
 	return 0;
 }

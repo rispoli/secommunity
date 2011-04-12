@@ -29,13 +29,10 @@ struct address {
 #define SIMPLEQUERY 0
 #define AGGREGATEQUERY 1
 
-#define MAX_DEPTH 10
-
 struct msg_c2s {
-	char query[256];
+	int query_size;
 	char aggregate_query[7]; // count, sum, times, min, max
 	int msg_type;
-	struct address addresses[MAX_DEPTH];
 	int a_counter;
 };
 
@@ -43,6 +40,6 @@ struct msg_c2s {
 #define DLV_ERROR -1
 
 struct msg_s2c {
-	char result[256];
+	int result_size;
 	int status;
 };

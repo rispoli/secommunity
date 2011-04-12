@@ -41,10 +41,10 @@
 
 #include <errno.h>
 #include "extpred.h"
+#include <fstream>
 #include <iostream>
 #include "../message.h"
 #include <sstream>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string>
 #include <string.h>
@@ -182,74 +182,82 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 	freeaddrinfo(serv_info);
 
 	struct msg_c2s msg;
-	memset(msg.query, 0, sizeof(msg.query));
-	if(query.size() > sizeof(msg.query)) {
-		cerr << "Network buffer size exceeded: split '" << query << "'" << endl;
-		close_and_cleanup(sock_fd);
-		return DLV_ERROR;
-	}
-	strncpy(msg.query, query.c_str(), sizeof(msg.query));
+	msg.query_size = query.size();
 	strncpy(msg.aggregate_query, aggregate_query.c_str(), sizeof(msg.aggregate_query));
 	msg.msg_type = msg_type;
-	int line_counter = 0;
+	vector< pair<string, int> > v;
 	if(iplist_fn != "") {
-		char ip_buf[INET6_ADDRSTRLEN + sizeof(":") + sizeof("65535")];
-		FILE *ipfile = fopen(iplist_fn.c_str(), "r");
-		if(!ipfile) {
+		ifstream ipfile(iplist_fn.c_str());
+		if(!ipfile.is_open()) {
 			cerr << "Could not open IP list" << endl;
 			close_and_cleanup(sock_fd);
 			return DLV_ERROR;
 		}
-		while(line_counter < MAX_DEPTH && fgets(ip_buf, sizeof(ip_buf), ipfile)) {
-			string line(ip_buf);
+		string line;
+		while(ipfile.good()) {
+			getline(ipfile, line);
 			unsigned int rv;
 			if((rv = line.find(":")) != string::npos) {
-				msg.addresses[line_counter].port = atoi(line.substr(rv + 1, line.length() - rv).c_str());
-				memset(msg.addresses[line_counter].ip, 0, sizeof(msg.addresses[line_counter].ip));
-				strncpy(msg.addresses[line_counter].ip, line.substr(0, rv).c_str(), sizeof(msg.addresses[line_counter].ip));
-				if(atoi(port.c_str()) == msg.addresses[line_counter].port && !strcmp(query_ip, msg.addresses[line_counter].ip)) {
-					cerr << "Loop detected: aborting" << endl;;
+				pair<string, int> p(line.substr(0, rv), atoi(line.substr(rv + 1, line.length() - rv).c_str()));
+				v.push_back(p);
+				if(atoi(port.c_str()) == p.second && !strcmp(query_ip, p.first.c_str())) {
+					cerr << "Loop detected: aborting" << endl;
 					close_and_cleanup(sock_fd);
 					return DLV_ERROR;
 				}
 			}
-			line_counter++;
 		}
-		fclose(ipfile);
+		ipfile.close();
 	}
-	if(line_counter != MAX_DEPTH) {
-		msg.addresses[line_counter].port = atoi(port.c_str());
-		memset(msg.addresses[line_counter].ip, 0, sizeof(msg.addresses[line_counter].ip));
-		strncpy(msg.addresses[line_counter].ip, query_ip, sizeof(msg.addresses[line_counter].ip));
-	} else {
-		cerr << "Maximum nesting depth reached: aborting" << endl;;
-		close_and_cleanup(sock_fd);
-		return DLV_ERROR;
-	}
-	msg.a_counter = line_counter + 1;
+	v.push_back(make_pair(query_ip, atoi(port.c_str())));
+	msg.a_counter = v.size();
 
-	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1) {
-		cerr << "Could not send query (" << errno << ")" << endl;;
+	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1 || send(sock_fd, (SCAST *)query.c_str(), query.size(), 0) == -1) {
+		cerr << "Could not send query (" << errno << ")" << endl;
 		close_and_cleanup(sock_fd);
 		return DLV_ERROR;
+	}
+
+	for(vector< pair<string, int> >::iterator it = v.begin(); it < v.end(); it++) {
+		struct address a;
+		a.port = it->second;
+		memset(a.ip, 0, sizeof(a.ip));
+		strncpy(a.ip, it->first.c_str(), sizeof(a.ip));
+		if(send(sock_fd, (SCAST *)&a, sizeof(a), 0) == -1) {
+			cerr << "Could not send query (" << errno << ")" << endl;
+			close_and_cleanup(sock_fd);
+			return DLV_ERROR;
+		}
 	}
 
 	struct msg_s2c answer;
-	memset(answer.result, 0, sizeof(answer.result));
 	if(recv(sock_fd, (RCAST *)&answer, sizeof(answer), 0) == -1) {
 		cerr << "Could not receive result (" << errno << ")" << endl;
 		close_and_cleanup(sock_fd);
 		return DLV_ERROR;
 	}
 
+	char *answer_result = (char *)malloc(answer.result_size + 1);
+	memset(answer_result, 0, answer.result_size + 1);
+	if(recv(sock_fd, (RCAST *)answer_result, answer.result_size, 0) == -1) {
+		cerr << "Could not receive data (" << errno << ")" << endl;
+		close_and_cleanup(sock_fd);
+		free(answer_result);
+		return 1;
+	}
+
 	close_and_cleanup(sock_fd);
 
 	if(answer.status == DLV_ERROR) {
-		cerr << iporhostname << ":" << port << " says: " << answer.result << endl;
+		cerr << iporhostname << ":" << port << " says: " << answer_result << endl;
+		free(answer_result);
 		return DLV_ERROR;
 	}
 
-	return atoi(answer.result);
+	int r = atoi(answer_result);
+	free(answer_result);
+
+	return r;
 }
 
 #ifdef __cplusplus
