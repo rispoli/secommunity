@@ -235,9 +235,6 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	if(WEXITSTATUS(exit_status)) {
 		result = c_output.str();
 		answer.status = DLV_ERROR;
-	} else if(c_output.str().find("Loop detected: aborting") != string::npos) {
-		result = "Loop detected: aborting";
-		answer.status = DLV_ERROR;
 	} else {
 		if(query.msg_type == SIMPLEQUERY) {
 			result = c_output.str() == "" ? "1" : "0";

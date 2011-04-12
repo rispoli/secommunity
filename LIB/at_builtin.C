@@ -120,13 +120,13 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 
 	if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		cerr << "Could not find Winsock dll" << endl;
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	if(LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
 		cerr << "Wrong Winsock version" << endl;
 		WSACleanup();
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 #endif
 
@@ -140,7 +140,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 #ifdef __WINDOWS
 		WSACleanup();
 #endif
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	for(p = serv_info; p != NULL; p = p->ai_next) {
@@ -165,7 +165,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 		cerr << "Failed to connect" << endl;
 		close_and_cleanup(sock_fd);
 		freeaddrinfo(serv_info);
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	char query_ip[INET6_ADDRSTRLEN];
@@ -176,7 +176,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 		cerr << "Could not get remote server's info" << endl;
 		close_and_cleanup(sock_fd);
 		freeaddrinfo(serv_info);
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	freeaddrinfo(serv_info);
@@ -191,7 +191,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 		if(!ipfile.is_open()) {
 			cerr << "Could not open IP list" << endl;
 			close_and_cleanup(sock_fd);
-			return DLV_ERROR;
+			exit(DLV_ERROR);
 		}
 		string line;
 		while(ipfile.good()) {
@@ -203,7 +203,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 				if(atoi(port.c_str()) == p.second && !strcmp(query_ip, p.first.c_str())) {
 					cerr << "Loop detected: aborting" << endl;
 					close_and_cleanup(sock_fd);
-					return DLV_ERROR;
+					exit(DLV_ERROR);
 				}
 			}
 		}
@@ -215,7 +215,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1 || send(sock_fd, (SCAST *)query.c_str(), query.size(), 0) == -1) {
 		cerr << "Could not send query (" << errno << ")" << endl;
 		close_and_cleanup(sock_fd);
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	for(vector< pair<string, int> >::iterator it = v.begin(); it < v.end(); it++) {
@@ -226,7 +226,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 		if(send(sock_fd, (SCAST *)&a, sizeof(a), 0) == -1) {
 			cerr << "Could not send query (" << errno << ")" << endl;
 			close_and_cleanup(sock_fd);
-			return DLV_ERROR;
+			exit(DLV_ERROR);
 		}
 	}
 
@@ -234,7 +234,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 	if(recv(sock_fd, (RCAST *)&answer, sizeof(answer), 0) == -1) {
 		cerr << "Could not receive result (" << errno << ")" << endl;
 		close_and_cleanup(sock_fd);
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	char *answer_result = (char *)malloc(answer.result_size + 1);
@@ -251,7 +251,7 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 	if(answer.status == DLV_ERROR) {
 		cerr << iporhostname << ":" << port << " says: " << answer_result << endl;
 		free(answer_result);
-		return DLV_ERROR;
+		exit(DLV_ERROR);
 	}
 
 	int r = atoi(answer_result);
