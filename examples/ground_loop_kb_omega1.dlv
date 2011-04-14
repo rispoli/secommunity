@@ -1,0 +1,5 @@
+#include <at_builtin>
+
+query1 :- #at("127.0.0.1:3334", query2).
+query3 :- #at("127.0.0.1:3334", query4).
+query5.

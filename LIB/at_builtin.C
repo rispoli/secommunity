@@ -76,22 +76,26 @@
 #endif
 
 #define AGGREGATE(function) \
-	BUILTIN(function##_at, iii) { \
+	BUILTIN(function##_at, iiiii) { \
 		return false; \
 	} \
-	BUILTIN(function##_at, iioi) { \
+	BUILTIN(function##_at, iioii) { \
 		if(argv[0].isString() && argv[1].isString()) { \
 			string iporhostname(argv[0].toString()); \
 			string query(argv[1].toString()); \
-			string iplist_fn((argc == 4 && argv[3].isString()) ? argv[3].toString() : ""); \
-			int r = process_query(iporhostname, query, iplist_fn, AGGREGATEQUERY, #function); \
+			string iplist_fn((argc == 5 && argv[3].isString()) ? argv[3].toString() : ""); \
+			string q_id((argc == 5 && argv[4].isSymbol()) ? argv[4].toSymbol() : ""); \
+			int r = process_query(iporhostname, query, iplist_fn, q_id, AGGREGATEQUERY, #function); \
 			argv[2] = CONSTANT(r); \
 			return r != DLV_ERROR; \
 		} \
 		return false; \
 	} \
+	BUILTIN(function##_at, iii) { \
+		return false; \
+	} \
 	BUILTIN(function##_at, iio) { \
-		return function##_at_iioi(argv, argc); \
+		return function##_at_iioii(argv, argc); \
 	}
 
 void close_and_cleanup(int sock_fd) {
@@ -105,7 +109,7 @@ void close_and_cleanup(int sock_fd) {
 #include "ntop.h"
 #endif
 
-int process_query(string iporhostname, string query, string iplist_fn, int msg_type, string aggregate_query) {
+int process_query(string iporhostname, string query, string iplist_fn, string q_id, int msg_type, string aggregate_query) {
 	int sock_fd = -1;
 	unsigned int rv;
 	string port("3333");
@@ -185,7 +189,8 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 	msg.query_size = query.size();
 	strncpy(msg.aggregate_query, aggregate_query.c_str(), sizeof(msg.aggregate_query));
 	msg.msg_type = msg_type;
-	vector< pair<string, int> > v;
+	vector<struct history_item> v;
+	struct history_item curr_q;
 	if(iplist_fn != "") {
 		ifstream ipfile(iplist_fn.c_str());
 		if(!ipfile.is_open()) {
@@ -194,23 +199,31 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 			exit(DLV_ERROR);
 		}
 		string line;
+		unsigned int rva, rv;
+		if(ipfile.good()) {
+			getline(ipfile, line);
+			if((rva = line.find("on: ")) != string::npos && (rv = line.find(":", 4)) != string::npos) {
+				curr_q.q_identifier = atoi(q_id.substr(1, q_id.length()).c_str());
+				memset(curr_q.ip, 0, sizeof(curr_q.ip));
+				strncpy(curr_q.ip, line.substr(4, rv - 4).c_str(), sizeof(curr_q.ip));
+				curr_q.port = atoi(line.substr(rv + 1, line.length() - rv).c_str());
+			}
+		}
 		while(ipfile.good()) {
 			getline(ipfile, line);
-			unsigned int rv;
-			if((rv = line.find(":")) != string::npos) {
-				pair<string, int> p(line.substr(0, rv), atoi(line.substr(rv + 1, line.length() - rv).c_str()));
-				v.push_back(p);
-				if(atoi(port.c_str()) == p.second && !strcmp(query_ip, p.first.c_str())) {
-					cerr << "Loop detected: aborting" << endl;
-					close_and_cleanup(sock_fd);
-					exit(DLV_ERROR);
-				}
+			if((rva = line.find("@")) != string::npos && (rv = line.find(":")) != string::npos) {
+				struct history_item h;
+				h.q_identifier = atoi(line.substr(0, rva).c_str());
+				memset(h.ip, 0, sizeof(h.ip));
+				strncpy(h.ip, line.substr(rva + 1, rv - rva - 1).c_str(), sizeof(h.ip));
+				h.port = atoi(line.substr(rv + 1, line.length() - rv).c_str());
+				v.push_back(h);
 			}
 		}
 		ipfile.close();
 	}
-	v.push_back(make_pair(query_ip, atoi(port.c_str())));
-	msg.a_counter = v.size();
+	if(q_id != "") v.push_back(curr_q);
+	msg.h_counter = v.size();
 
 	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1 || send(sock_fd, (SCAST *)query.c_str(), query.size(), 0) == -1) {
 		cerr << "Could not send query (" << errno << ")" << endl;
@@ -218,12 +231,8 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 		exit(DLV_ERROR);
 	}
 
-	for(vector< pair<string, int> >::iterator it = v.begin(); it < v.end(); it++) {
-		struct address a;
-		a.port = it->second;
-		memset(a.ip, 0, sizeof(a.ip));
-		strncpy(a.ip, it->first.c_str(), sizeof(a.ip));
-		if(send(sock_fd, (SCAST *)&a, sizeof(a), 0) == -1) {
+	for(vector<struct history_item>::iterator it = v.begin(); it < v.end(); it++) {
+		if(send(sock_fd, (SCAST *)&(*it), sizeof(*it), 0) == -1) {
 			cerr << "Could not send query (" << errno << ")" << endl;
 			close_and_cleanup(sock_fd);
 			exit(DLV_ERROR);
@@ -264,14 +273,15 @@ int process_query(string iporhostname, string query, string iplist_fn, int msg_t
 extern "C" {
 #endif
 
-	BUILTIN(at, iii) {
+	BUILTIN(at, iiii) {
 		if(argv[0].isString() && argv[1].isSymbol()) {
 
 			string iporhostname(argv[0].toString());
 			string query(argv[1].toSymbol());
-			string iplist_fn((argc == 3 && argv[2].isString()) ? argv[2].toString() : "");
+			string iplist_fn((argc == 4 && argv[2].isString()) ? argv[2].toString() : "");
+			string q_id((argc == 4 && argv[3].isSymbol()) ? argv[3].toSymbol() : ""); \
 
-			return process_query(iporhostname, query, iplist_fn, SIMPLEQUERY, "") == DLV_SUCCESS;
+			return process_query(iporhostname, query, iplist_fn, q_id, SIMPLEQUERY, "") == DLV_SUCCESS;
 
 		}
 
@@ -279,7 +289,7 @@ extern "C" {
 	}
 
 	BUILTIN(at, ii) {
-		return at_iii(argv, argc);
+		return at_iiii(argv, argc);
 	}
 
 	AGGREGATE(count)

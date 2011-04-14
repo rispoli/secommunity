@@ -1,0 +1,3 @@
+#include <at_builtin>
+
+query0 :- #at("127.0.0.1:3333", query1).

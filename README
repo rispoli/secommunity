@@ -84,6 +84,15 @@ How to use the examples:
       > $DLC examples/loop_query.dlv
       > kill `pidof -o %PPID dlv-server`
 
+  ground_loop_*:
+  -------
+    This example shows how different knowledge bases can reference each other
+    and still obtain a meaningful result if the requests do not form a loop:
+      > ./dlv-server -e $DLC -k examples/ground_loop_kb_omega1.dlv -d
+      > ./dlv-server -e $DLC -k examples/ground_loop_kb_omega2.dlv -d -p 3334
+      > $DLC examples/ground_loop_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
 N.B.:
 -----
   This README file is composed using Donald E. Knuth's literate programming

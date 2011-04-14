@@ -21,7 +21,8 @@
 
 #define INET6_ADDRSTRLEN 46
 
-struct address {
+struct history_item {
+	int q_identifier;
 	char ip[INET6_ADDRSTRLEN];
 	int port;
 };
@@ -33,7 +34,7 @@ struct msg_c2s {
 	int query_size;
 	char aggregate_query[7]; // count, sum, times, min, max
 	int msg_type;
-	int a_counter;
+	int h_counter;
 };
 
 #define DLV_SUCCESS 1

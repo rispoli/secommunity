@@ -113,7 +113,7 @@ void delete_file(const char *filename) {
 DWORD WINAPI handle_query(void *lp) {
 	int &sock_fd = *(int *)lp;
 #else
-int handle_query(string executable_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr) {
+int handle_query(string executable_path, string options, string kb_fn, int sock_fd, string log_fn, int log_level, struct in_addr sin_addr, char *server_ip, int server_port) {
 	signal(SIGCHLD, SIG_DFL);
 #endif
 
@@ -139,12 +139,12 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		return 1;
 	}
 
-	struct address *query_addresses = (struct address *)malloc(query.a_counter * sizeof(struct address));
-	if(recv(sock_fd, (RCAST *)query_addresses, query.a_counter * sizeof(struct address), 0) == -1) {
+	struct history_item *query_history = (struct history_item *)malloc(query.h_counter * sizeof(struct history_item));
+	if(query.h_counter > 0 && recv(sock_fd, (RCAST *)query_history, query.h_counter * sizeof(struct history_item), 0) == -1) {
 		cerr << "Could not receive data (" << errno << ")" << endl;
 		closesocket(sock_fd);
 		free(query_query);
-		free(query_addresses);
+		free(query_history);
 		return 1;
 	}
 
@@ -156,11 +156,13 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not write temp. file: " << iplist_fn.str() << endl;
 		closesocket(sock_fd);
 		free(query_query);
-		free(query_addresses);
+		free(query_history);
 		return 1;
 	}
-	for(int i = 0; i < query.a_counter; i++)
-		iplist_f << query_addresses[i].ip << ":" << query_addresses[i].port << endl;
+
+	iplist_f << "on: " << server_ip << ":" << server_port << endl;
+	for(int i = 0; i < query.h_counter; i++)
+		iplist_f << query_history[i].q_identifier << "@" << query_history[i].ip << ":" << query_history[i].port << endl;
 	iplist_f.close();
 
 	ifstream kb_f_b(kb_fn.c_str());
@@ -170,12 +172,13 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not open knowledge base" << endl;
 		closesocket(sock_fd);
 		free(query_query);
-		free(query_addresses);
+		free(query_history);
 		return 1;
 	}
 
-	string line;
+	int q_identifier = 0;
 	while(kb_f_b.good()) {
+		string line;
 		getline(kb_f_b, line);
 		unsigned int p_h = 0;
 		while((p_h = line.find("#", p_h)) != string::npos) {
@@ -183,8 +186,11 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 			if((p_o = line.find("(", p_h)) != string::npos && (!line.compare(p_h + 1, p_o - p_h - 1, "at") || !line.compare(p_h + 1, p_o - p_h - 1, "count_at") || !line.compare(p_h + 1, p_o - p_h - 1, "sum_at") || !line.compare(p_h + 1, p_o - p_h - 1, "times_at") || !line.compare(p_h + 1, p_o - p_h - 1, "min_at") || !line.compare(p_h + 1, p_o - p_h - 1, "max_at"))) {
 				unsigned int next_or_end = line.find("#", p_o);
 				unsigned int p_c = line.rfind(")", next_or_end);
-				line.insert(p_c, ", \"" + iplist_fn.str() + "\"");
-				p_h = p_c + iplist_fn.str().length();
+				stringstream qi; qi << "q" << q_identifier;
+				line.insert(p_c + 1, ", " + qi.str());
+				line.insert(p_c, ", \"" + iplist_fn.str() + "\", " + qi.str());
+				p_h = p_c + iplist_fn.str().length() + qi.str().length() + sizeof(", \"\", ");
+				q_identifier++;
 			} else p_h = string::npos;
 		}
 		kb_f_a << line << endl;
@@ -200,13 +206,29 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not write temp. file: " << query_fn.str() << endl;
 		closesocket(sock_fd);
 		free(query_query);
-		free(query_addresses);
+		free(query_history);
 		return 1;
 	}
+
+	stringstream on, off;
+	bool *active_queries = (bool *)malloc(q_identifier * sizeof(bool));
+	for(int i = 0; i < q_identifier; i++)
+		active_queries[i] = true;
+	for(int i = 0; i < query.h_counter; i++)
+		if(query_history[i].port == server_port && !strcmp(query_history[i].ip, server_ip))
+			active_queries[query_history[i].q_identifier] = false;
+	for(int i = 0; i < q_identifier; i++)
+		if(active_queries[i])
+			on << "q" << i << "." << endl;
+		else
+			off << ":- ~q" << i << "." << endl;
+	free(active_queries);
+
 	if(query.msg_type == SIMPLEQUERY)
 		query_f << ":- " << query_query << ".";
 	else if(query.msg_type == AGGREGATEQUERY)
 		query_f << "remote_" << query.aggregate_query << "_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #" << query.aggregate_query << "{" << query_query << "} = X_" << pid_time.str() << ".";
+	query_f << endl << on.str() << off.str();
 	query_f.close();
 
 	FILE *fpipe;
@@ -217,7 +239,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not execute command: " << command << " (" << errno << ")" << endl;
 		closesocket(sock_fd);
 		free(query_query);
-		free(query_addresses);
+		free(query_history);
 		delete_file(query_fn.str().c_str());
 		delete_file(iplist_fn.str().c_str());
 		delete_file(kb_fn_a.str().c_str());
@@ -252,7 +274,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		cerr << "Could not send answer (" << errno << ")" << endl;
 		closesocket(sock_fd);
 		free(query_query);
-		free(query_addresses);
+		free(query_history);
 		delete_file(query_fn.str().c_str());
 		delete_file(iplist_fn.str().c_str());
 		delete_file(kb_fn_a.str().c_str());
@@ -269,7 +291,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 
 	closesocket(sock_fd);
 	free(query_query);
-	free(query_addresses);
+	free(query_history);
 	delete_file(query_fn.str().c_str());
 	delete_file(iplist_fn.str().c_str());
 	delete_file(kb_fn_a.str().c_str());
@@ -311,7 +333,7 @@ int main(int argc, char *argv[]) {
 
 	if(arg_nullcheck(argtable) != 0) {
 		cerr << "Could not allocate enough memory for command line arguments" << endl;
-		arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
+		arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
 		return 1;
 	}
 
@@ -327,13 +349,13 @@ int main(int argc, char *argv[]) {
 		cout << "Usage: " << argv[0];
 		arg_print_syntaxv(stdout, argtable, "\n");
 		arg_print_glossary(stdout, argtable, "  %-30s %s\n");
-		arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
+		arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
 		return 0;
 	}
 
 	if(nerrors > 0) {
 		arg_print_errors(stdout, end, argv[0]);
-		arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
+		arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
 		return 1;
 	}
 
@@ -364,7 +386,7 @@ int main(int argc, char *argv[]) {
 	int log_level = log_l->ival[0];
 #endif
 
-	arg_freetable(argtable,sizeof(argtable)/sizeof(argtable[0]));
+	arg_freetable(argtable, sizeof(argtable) / sizeof(argtable[0]));
 
 #ifndef __WINDOWS
 	if(pipe(termination_pipe) == -1) {
@@ -453,6 +475,8 @@ int main(int argc, char *argv[]) {
 			CreateThread(0, 0, &handle_query, (void *)&new_sock_fd , 0, 0);
 #else
 			int pid;
+			struct sockaddr_in serv_addr_;
+			socklen_t serv_addr_size = sizeof(struct sockaddr);
 			switch(pid = fork()) {
 				case -1:
 					cerr << "Could not fork child (" << errno << ")" << endl;
@@ -461,7 +485,8 @@ int main(int argc, char *argv[]) {
 					close(sock_fd);
 					close(termination_pipe[0]);
 					close(termination_pipe[1]);
-					return handle_query(executable_path, options, kb_fn, new_sock_fd, log_fn, log_level, cli_addr.sin_addr);
+					getsockname(new_sock_fd, (struct sockaddr *)&serv_addr_, &serv_addr_size);
+					return handle_query(executable_path, options, kb_fn, new_sock_fd, log_fn, log_level, cli_addr.sin_addr, inet_ntoa(serv_addr_.sin_addr), port_no);
 				default:
 					close(new_sock_fd);
 			}
