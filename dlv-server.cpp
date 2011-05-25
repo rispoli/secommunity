@@ -140,13 +140,14 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	}
 
 	struct history_item *query_history = (struct history_item *)malloc(query.h_counter * sizeof(struct history_item));
-	if(query.h_counter > 0 && recv(sock_fd, (RCAST *)query_history, query.h_counter * sizeof(struct history_item), 0) == -1) {
-		cerr << "Could not receive data (" << errno << ")" << endl;
-		closesocket(sock_fd);
-		free(query_query);
-		free(query_history);
-		return 1;
-	}
+	for(int i = 0; i < query.h_counter; i++)
+		if(recv(sock_fd, (RCAST *)&query_history[i], sizeof(struct history_item), 0) == -1) {
+			cerr << "Could not receive data (" << errno << ")" << endl;
+			closesocket(sock_fd);
+			free(query_query);
+			free(query_history);
+			return 1;
+		}
 
 	stringstream pid_time; pid_time << getpid() << "_" << time(NULL);
 	stringstream query_fn; query_fn << DIR_TEMP_FILES << "dlv-query_" << pid_time.str();
