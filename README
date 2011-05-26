@@ -53,6 +53,14 @@ How to use the examples:
       > $DLC examples/remote_aggregate_query.dlv
       > kill `pidof -o %PPID dlv-server`
 
+  remote_negation_*:
+  ------------------
+    This example shows how to make a remote query containing a negated formula and
+    have it intepreted remotely in the correct fashion:
+      > ./dlv-server -e $DLC -k examples/remote_negation_kb.dlv -d
+      > $DLC examples/remote_negation_query.dlv
+      > kill `pidof -o %PPID dlv-server`
+
   one_local_at_three_remote_queries_*:
   ------------------------------------
     This example has only one #at statement in the [...]_query.dlv file but,

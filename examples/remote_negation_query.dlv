@@ -1,0 +1,5 @@
+#include <at_builtin>
+
+query0 :- #at("127.0.0.1:3333", neg(a)).
+query1 :- #at("127.0.0.1:3333", b).
+query2 :- #at("127.0.0.1:3333", neg(c(d, e(f, g)))).

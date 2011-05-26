@@ -10,7 +10,7 @@ SOURCES:=$(wildcard *.cpp)
 OBJECTS:=$(SOURCES:.cpp=.o)
 EXECUTABLE=dlv-server
 
-all: $(EXECUTABLE)
+all: $(EXECUTABLE) LIB/at_builtin.so.0
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) $(ARGTABLEO) -o $@
@@ -28,5 +28,9 @@ $(EXECUTABLE)-windows-dynamic: $(OBJECTS)
 dlv-server.o: $(SOURCES) message.h
 	$(CC) $(CFLAGS) -c $(ARGTABLEI) $< -o $@
 
+LIB/at_builtin.so.0: LIB/at_builtin.C
+	cd LIB; \
+	./dynamic at_builtin
+
 clean:
-	-rm -f $(OBJECTS) $(EXECUTABLE) $(EXECUTABLE).exe
+	-rm -f $(OBJECTS) $(EXECUTABLE) $(EXECUTABLE).exe LIB/at_builtin.o LIB/at_builtin.so*

@@ -225,6 +225,10 @@ int process_query(string iporhostname, string query, string iplist_fn, string q_
 	if(q_id != "") v.push_back(curr_q);
 	msg.h_counter = v.size();
 
+	if((rv = query.find("neg(")) == 0) {
+		query.replace(rv, 4, "-");
+		query.resize(query.size() - 1);
+	}
 	if(send(sock_fd, (SCAST *)&msg, sizeof(msg), 0) == -1 || send(sock_fd, (SCAST *)query.c_str(), query.size(), 0) == -1) {
 		cerr << "Could not send query (" << errno << ")" << endl;
 		close_and_cleanup(sock_fd);
