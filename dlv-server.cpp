@@ -20,6 +20,8 @@
 */
 
 #include <argtable2.h>
+#include <boost/algorithm/string.hpp>
+#include <boost/regex.hpp>
 #include <errno.h>
 #include <fstream>
 #include <iostream>
@@ -100,8 +102,20 @@ void log_message(string filename, string message) {
 	stringstream ss_time;
 	time_t now = time(NULL);
 	ss_time << ctime(&now);
-	fprintf(logfile, "%s\n", ("[" + ss_time.str().substr(0, ss_time.str().length() -1) + "] " + message).c_str());
+	fprintf(logfile, "%s\n", ("[" + ss_time.str().substr(0, ss_time.str().length() - 1) + "] " + message).c_str());
 	fclose(logfile);
+}
+
+void split_and_trim(vector<string> &v, string s, char c) {
+	unsigned int starting_pos = 0, parentheses = 0;
+	for(unsigned int i = 0; i < s.size(); i++) {
+		if(s[i] == c && !parentheses) {
+			v.push_back(boost::algorithm::trim_copy(s.substr(starting_pos, i - starting_pos)));
+			starting_pos = i + 1;
+		} else if(s[i] == '(') parentheses++;
+		else if(s[i] == ')') parentheses--;
+	}
+	v.push_back(boost::algorithm::trim_copy(s.substr(starting_pos, s.size() - starting_pos)));
 }
 
 void delete_file(const char *filename) {
@@ -225,9 +239,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 			off << ":- ~q" << i << "." << endl;
 	free(active_queries);
 
-	if(query.msg_type == SIMPLEQUERY)
-		query_f << ":- " << query_query << ".";
-	else if(query.msg_type == AGGREGATEQUERY)
+	if(query.msg_type == AGGREGATEQUERY)
 		query_f << "remote_" << query.aggregate_query << "_" << pid_time.str() << "(X_" << pid_time.str() << ") :- #" << query.aggregate_query << "{" << query_query << "} = X_" << pid_time.str() << ".";
 	query_f << endl << on.str() << off.str();
 	query_f.close();
@@ -260,7 +272,21 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		answer.status = DLV_ERROR;
 	} else {
 		if(query.msg_type == SIMPLEQUERY) {
-			result = c_output.str() == "" ? "1" : "0";
+			bool sqr = false;
+			vector<string> lines;
+			string c_output_s = c_output.str();
+			boost::split(lines, c_output_s, boost::is_any_of("\n"));
+			boost::smatch matches;
+			boost::regex rx("\\{(.*)\\}");
+			for(unsigned int i = 0; i < lines.size(); i++)
+				if(boost::regex_match(lines[i], matches, rx)) {
+					string match(matches[1].first, matches[1].second);
+					vector<string> elements;
+					split_and_trim(elements, match, ',');
+					for(unsigned int j = 0; j < elements.size(); j++)
+						sqr = sqr || query_query == elements[j];
+				}
+			result = sqr ? "1" : "0";
 			answer.status = DLV_SUCCESS;
 		} else if(query.msg_type == AGGREGATEQUERY) {
 			stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
@@ -286,7 +312,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 		stringstream message;
 		message << "received message from: " << inet_ntoa(sin_addr);
 		if(log_level > 1)
-			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query_query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == DLV_SUCCESS ? (c_output.str() == "" ? "true" : "false") : result);
+			message << ", query: " << query.aggregate_query << (query.msg_type == AGGREGATEQUERY ? " " : "") << "'" << query_query << "', result: " << (query.msg_type == SIMPLEQUERY && answer.status == DLV_SUCCESS ? (result == "1" ? "true" : "false") : result);
 		log_message(log_fn, message.str());
 	}
 

@@ -1,10 +1,10 @@
 CC=/usr/bin/g++
-CFLAGS=-W -Wall -Wextra -Werror -pedantic -ansi
+CFLAGS=-W -Wall -Wextra -Werror -pedantic -ansi -Os
 ARGTABLE_PATH=./argtable2
 ARGTABLEI=-I$(ARGTABLE_PATH)/include
 ARGTABLEL=$(ARGTABLE_PATH)/lib
 ARGTABLEO=$(ARGTABLEL)/libargtable2.a
-LDFLAGS=-L$(ARGTABLEL)
+LDFLAGS=-L$(ARGTABLEL) -lboost_regex
 LDLIBS=-largtable2
 SOURCES:=$(wildcard *.cpp)
 OBJECTS:=$(SOURCES:.cpp=.o)
