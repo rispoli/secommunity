@@ -195,12 +195,12 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	while(kb_f_b.good()) {
 		string line;
 		getline(kb_f_b, line);
-		unsigned int p_h = 0;
+		size_t p_h = 0;
 		while((p_h = line.find("#", p_h)) != string::npos) {
-			unsigned int p_o;
+			size_t p_o;
 			if((p_o = line.find("(", p_h)) != string::npos && (!line.compare(p_h + 1, p_o - p_h - 1, "at") || !line.compare(p_h + 1, p_o - p_h - 1, "count_at") || !line.compare(p_h + 1, p_o - p_h - 1, "sum_at") || !line.compare(p_h + 1, p_o - p_h - 1, "times_at") || !line.compare(p_h + 1, p_o - p_h - 1, "min_at") || !line.compare(p_h + 1, p_o - p_h - 1, "max_at"))) {
-				unsigned int next_or_end = line.find("#", p_o);
-				unsigned int p_c = line.rfind(")", next_or_end);
+				size_t next_or_end = line.find("#", p_o);
+				size_t p_c = line.rfind(")", next_or_end);
 				stringstream qi; qi << "q" << q_identifier;
 				line.insert(p_c + 1, ", " + qi.str());
 				line.insert(p_c, ", \"" + iplist_fn.str() + "\", " + qi.str());
@@ -290,7 +290,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 			answer.status = DLV_SUCCESS;
 		} else if(query.msg_type == AGGREGATEQUERY) {
 			stringstream str_to_search; str_to_search << "remote_" << query.aggregate_query << "_" << pid_time.str();
-			unsigned int p = c_output.str().find(str_to_search.str());
+			size_t p = c_output.str().find(str_to_search.str());
 			result = c_output.str().substr(p + str_to_search.str().length() + 1, c_output.str().find(")", p) - c_output.str().find("(", p) - 1);
 			answer.status = DLV_SUCCESS;
 		}

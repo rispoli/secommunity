@@ -111,7 +111,7 @@ void close_and_cleanup(int sock_fd) {
 
 int process_query(string iporhostname, string query, string iplist_fn, string q_id, int msg_type, string aggregate_query) {
 	int sock_fd = -1;
-	unsigned int rv;
+	size_t rv;
 	string port("3333");
 
 	if((rv = iporhostname.find(":")) != string::npos) {
@@ -199,7 +199,7 @@ int process_query(string iporhostname, string query, string iplist_fn, string q_
 			exit(DLV_ERROR);
 		}
 		string line;
-		unsigned int rva, rv;
+		size_t rva, rv;
 		if(ipfile.good()) {
 			getline(ipfile, line);
 			if((rva = line.find("on: ")) != string::npos && (rv = line.find(":", 4)) != string::npos) {
