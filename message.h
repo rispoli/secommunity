@@ -31,16 +31,16 @@ struct history_item {
 #define AGGREGATEQUERY 1
 
 struct msg_c2s {
-	int query_size;
+	size_t query_size;
 	char aggregate_query[7]; // count, sum, times, min, max
 	int msg_type;
-	int h_counter;
+	size_t h_counter;
 };
 
 #define DLV_SUCCESS 1
 #define DLV_ERROR -1
 
 struct msg_s2c {
-	int result_size;
+	size_t result_size;
 	int status;
 };

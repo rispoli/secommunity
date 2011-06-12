@@ -108,7 +108,7 @@ void log_message(string filename, string message) {
 
 void split_and_trim(vector<string> &v, string s, char c) {
 	unsigned int starting_pos = 0, parentheses = 0;
-	for(unsigned int i = 0; i < s.size(); i++) {
+	for(size_t i = 0; i < s.size(); i++) {
 		if(s[i] == c && !parentheses) {
 			v.push_back(boost::algorithm::trim_copy(s.substr(starting_pos, i - starting_pos)));
 			starting_pos = i + 1;
@@ -154,7 +154,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	}
 
 	struct history_item *query_history = (struct history_item *)malloc(query.h_counter * sizeof(struct history_item));
-	for(int i = 0; i < query.h_counter; i++)
+	for(size_t i = 0; i < query.h_counter; i++)
 		if(recv(sock_fd, (RCAST *)&query_history[i], sizeof(struct history_item), 0) == -1) {
 			cerr << "Could not receive data (" << errno << ")" << endl;
 			closesocket(sock_fd);
@@ -176,7 +176,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	}
 
 	iplist_f << "on: " << server_ip << ":" << server_port << endl;
-	for(int i = 0; i < query.h_counter; i++)
+	for(size_t i = 0; i < query.h_counter; i++)
 		iplist_f << query_history[i].q_identifier << "@" << query_history[i].ip << ":" << query_history[i].port << endl;
 	iplist_f.close();
 
@@ -229,7 +229,7 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 	bool *active_queries = (bool *)malloc(q_identifier * sizeof(bool));
 	for(int i = 0; i < q_identifier; i++)
 		active_queries[i] = true;
-	for(int i = 0; i < query.h_counter; i++)
+	for(size_t i = 0; i < query.h_counter; i++)
 		if(query_history[i].port == server_port && !strcmp(query_history[i].ip, server_ip))
 			active_queries[query_history[i].q_identifier] = false;
 	for(int i = 0; i < q_identifier; i++)
@@ -278,12 +278,12 @@ int handle_query(string executable_path, string options, string kb_fn, int sock_
 			boost::split(lines, c_output_s, boost::is_any_of("\n"));
 			boost::smatch matches;
 			boost::regex rx("\\{(.*)\\}");
-			for(unsigned int i = 0; i < lines.size(); i++)
+			for(size_t i = 0; i < lines.size(); i++)
 				if(boost::regex_match(lines[i], matches, rx)) {
 					string match(matches[1].first, matches[1].second);
 					vector<string> elements;
 					split_and_trim(elements, match, ',');
-					for(unsigned int j = 0; j < elements.size(); j++)
+					for(size_t j = 0; j < elements.size(); j++)
 						sqr = sqr || query_query == elements[j];
 				}
 			result = sqr ? "1" : "0";
@@ -480,7 +480,6 @@ int main(int argc, char *argv[]) {
 
 		if(rc == -1) {
 			cerr << "Could not select (" << errno << ")" << endl;
-			perror("-->");
 			close(sock_fd);
 			close(termination_pipe[0]);
 			close(termination_pipe[1]);
