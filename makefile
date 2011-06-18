@@ -28,7 +28,7 @@ $(EXECUTABLE)-windows-dynamic: $(OBJECTS)
 dlv-server.o: $(SOURCES) message.h
 	$(CC) $(CFLAGS) -c $(ARGTABLEI) $< -o $@
 
-LIB/at_builtin.so.0: LIB/at_builtin.C
+LIB/at_builtin.so.0: LIB/at_builtin.C message.h
 	cd LIB; \
 	./dynamic at_builtin
 
